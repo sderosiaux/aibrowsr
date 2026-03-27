@@ -191,22 +191,50 @@ async fn run(cli: Cli) -> Result<(), Box<dyn std::error::Error>> {
 
     // All other commands need a browser connection + CDP client
     let mut store = session::load_session()?;
-    session::cleanup_stale(&mut store);
 
-    // Resolve browser
-    let opts = BrowserOptions {
-        name: cli.browser.clone(),
-        headless: cli.headless,
-        ignore_https_errors: cli.ignore_https_errors,
-        connect: cli.connect.clone(),
+    // Try to reuse existing session (connectivity check replaces stale PID cleanup) before launching a new browser
+    let conn = if let Some(existing) = store.browsers.get(&cli.browser) {
+        // Try connecting to the stored endpoint
+        let ws = &existing.ws_endpoint;
+        let http = browser::extract_http_from_ws(ws);
+        match CdpClient::connect(ws).await {
+            Ok(_client) => {
+                // Existing browser is alive — reuse it
+                drop(_client);
+                browser::BrowserConnection {
+                    ws_endpoint: ws.clone(),
+                    http_endpoint: Some(http),
+                    pid: existing.pid,
+                }
+            }
+            Err(_) => {
+                // Dead — clean up and launch fresh
+                store.browsers.remove(&cli.browser);
+                let opts = BrowserOptions {
+                    name: cli.browser.clone(),
+                    headless: cli.headless,
+                    ignore_https_errors: cli.ignore_https_errors,
+                    connect: cli.connect.clone(),
+                };
+                browser::resolve_browser(&opts).await?
+            }
+        }
+    } else {
+        let opts = BrowserOptions {
+            name: cli.browser.clone(),
+            headless: cli.headless,
+            ignore_https_errors: cli.ignore_https_errors,
+            connect: cli.connect.clone(),
+        };
+        browser::resolve_browser(&opts).await?
     };
 
-    let conn = browser::resolve_browser(&opts).await?;
+    let http_endpoint = conn.http_endpoint.as_deref().ok_or_else(|| {
+        "No HTTP endpoint available. Cannot resolve page WebSocket URL."
+    })?;
 
-    // Connect CDP
-    let client = CdpClient::connect(&conn.ws_endpoint).await?;
-    client.enable("Page").await?;
-    client.enable("Runtime").await?;
+    // Connect browser-level CDP for Target operations
+    let browser_client = CdpClient::connect(&conn.ws_endpoint).await?;
 
     // Ensure browser session
     let browser_session = session::ensure_browser(
@@ -218,10 +246,13 @@ async fn run(cli: Cli) -> Result<(), Box<dyn std::error::Error>> {
     );
 
     // Resolve page target — use first existing page or create one
-    let target_id = resolve_page_target(&client, browser_session).await?;
+    let target_id = resolve_page_target(&browser_client, browser_session).await?;
 
-    // Attach to target to get a session-scoped client
-    // For now we operate on the browser-level endpoint which works for single-tab usage
+    // Connect page-level CDP (for Page.*, Runtime.*, DOM.*, etc.)
+    let page_ws = browser::get_page_ws_url(http_endpoint, &target_id).await?;
+    let client = CdpClient::connect(&page_ws).await?;
+    client.enable("Page").await?;
+    client.enable("Runtime").await?;
 
     // Execute command
     match cli.command {
@@ -321,7 +352,7 @@ async fn run(cli: Cli) -> Result<(), Box<dyn std::error::Error>> {
         }
 
         Command::Tabs => {
-            let output = commands::tabs::run(&client).await?;
+            let output = commands::tabs::run(&browser_client).await?;
             print!("{output}");
         }
 
@@ -460,8 +491,12 @@ async fn cmd_close(browser_name: &str) -> Result<(), Box<dyn std::error::Error>>
             // Kill the browser process if we manage it
             if let Some(pid) = b.pid {
                 #[cfg(unix)]
-                unsafe {
-                    libc::kill(pid as libc::pid_t, libc::SIGTERM);
+                {
+                    let _ = std::process::Command::new("kill")
+                        .arg(pid.to_string())
+                        .stdout(std::process::Stdio::null())
+                        .stderr(std::process::Stdio::null())
+                        .status();
                 }
                 #[cfg(not(unix))]
                 {

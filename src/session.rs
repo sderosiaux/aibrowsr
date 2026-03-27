@@ -147,14 +147,23 @@ fn dev_browser_dir() -> Result<PathBuf, SessionError> {
 }
 
 fn is_process_alive(pid: u32) -> bool {
-    #[cfg(unix)]
+    // Check /proc on Linux, or use kill -0 via Command on Unix
+    #[cfg(target_os = "linux")]
     {
-        // kill(pid, 0) checks if process exists without sending a signal
-        unsafe { libc::kill(pid as libc::pid_t, 0) == 0 }
+        std::path::Path::new(&format!("/proc/{pid}")).exists()
+    }
+    #[cfg(target_os = "macos")]
+    {
+        std::process::Command::new("kill")
+            .args(["-0", &pid.to_string()])
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .status()
+            .map(|s| s.success())
+            .unwrap_or(false)
     }
     #[cfg(not(unix))]
     {
-        // On Windows, assume alive — will fail on reconnect if dead
         let _ = pid;
         true
     }

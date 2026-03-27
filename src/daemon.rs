@@ -170,6 +170,9 @@ pub fn spawn_daemon() -> Result<(), DaemonError> {
     #[cfg(unix)]
     {
         use std::os::unix::process::CommandExt;
+        // SAFETY: setsid() creates a new session so the daemon doesn't die with the terminal.
+        // No shared state is accessed. This is the standard Unix daemonization pattern.
+        #[allow(unsafe_code)]
         unsafe {
             cmd.pre_exec(|| {
                 if libc::setsid() == -1 {

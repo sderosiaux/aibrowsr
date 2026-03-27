@@ -23,8 +23,49 @@ impl Default for BrowserOptions {
 
 /// Result of resolving a browser connection.
 pub struct BrowserConnection {
+    /// WebSocket endpoint for the browser (Target.* commands).
     pub ws_endpoint: String,
+    /// HTTP base URL for /json/list queries.
+    pub http_endpoint: Option<String>,
     pub pid: Option<u32>,
+}
+
+/// Fetch the page-specific WebSocket URL for a given target ID.
+/// Queries /json/list on the browser's HTTP endpoint.
+pub async fn get_page_ws_url(
+    http_endpoint: &str,
+    target_id: &str,
+) -> Result<String, BrowserError> {
+    let url = format!("{}/json/list", http_endpoint.trim_end_matches('/'));
+
+    // Retry a few times — Chrome may not be fully ready yet
+    let mut last_err = BrowserError::NotFound("No attempts made".into());
+    for _ in 0..5 {
+        match reqwest_get_json(&url, Duration::from_millis(2000)).await {
+            Ok(list) => {
+                if let Some(pages) = list.as_array() {
+                    for page in pages {
+                        let id = page.get("id").and_then(|v| v.as_str()).unwrap_or("");
+                        if id == target_id {
+                            if let Some(ws) = page.get("webSocketDebuggerUrl").and_then(|v| v.as_str()) {
+                                return Ok(ws.to_string());
+                            }
+                        }
+                    }
+                    // Target not found in list — might not be created yet
+                    last_err = BrowserError::NotFound(format!(
+                        "Target {target_id} not found in /json/list"
+                    ));
+                }
+            }
+            Err(e) => {
+                last_err = e;
+            }
+        }
+        tokio::time::sleep(Duration::from_millis(300)).await;
+    }
+
+    Err(last_err)
 }
 
 /// Resolve a browser connection: either connect to an existing Chrome or launch one.
@@ -36,6 +77,7 @@ pub async fn resolve_browser(opts: &BrowserOptions) -> Result<BrowserConnection,
         if endpoint.starts_with("ws://") || endpoint.starts_with("wss://") {
             return Ok(BrowserConnection {
                 ws_endpoint: endpoint.clone(),
+                http_endpoint: Some(extract_http_endpoint(endpoint)),
                 pid: None,
             });
         }
@@ -87,8 +129,12 @@ async fn launch_browser(opts: &BrowserOptions) -> Result<BrowserConnection, Brow
     let port_file = profile_dir.join("DevToolsActivePort");
     let ws_endpoint = wait_for_devtools_port(&port_file, Duration::from_secs(10)).await?;
 
+    // Extract http endpoint from ws URL: ws://127.0.0.1:PORT/... → http://127.0.0.1:PORT
+    let http_endpoint = extract_http_endpoint(&ws_endpoint);
+
     Ok(BrowserConnection {
         ws_endpoint,
+        http_endpoint: Some(http_endpoint),
         pid: Some(pid),
     })
 }
@@ -100,6 +146,7 @@ async fn auto_discover() -> Result<BrowserConnection, BrowserError> {
         if let Some(ws) = read_devtools_active_port(&candidate) {
             if probe_ws_endpoint(&ws).await {
                 return Ok(BrowserConnection {
+                    http_endpoint: Some(extract_http_endpoint(&ws)),
                     ws_endpoint: ws,
                     pid: None,
                 });
@@ -111,6 +158,7 @@ async fn auto_discover() -> Result<BrowserConnection, BrowserError> {
     for port in DISCOVERY_PORTS {
         if let Ok(ws) = fetch_ws_endpoint(&format!("http://127.0.0.1:{port}")).await {
             return Ok(BrowserConnection {
+                http_endpoint: Some(format!("http://127.0.0.1:{port}")),
                 ws_endpoint: ws,
                 pid: None,
             });
@@ -131,9 +179,25 @@ async fn resolve_http_endpoint(endpoint: &str) -> Result<BrowserConnection, Brow
     })?;
 
     Ok(BrowserConnection {
+        http_endpoint: Some(endpoint.trim_end_matches('/').to_string()),
         ws_endpoint: ws,
         pid: None,
     })
+}
+
+/// Extract an HTTP endpoint from a WebSocket URL.
+/// `ws://127.0.0.1:9222/devtools/browser/...` → `http://127.0.0.1:9222`
+pub fn extract_http_from_ws(ws_url: &str) -> String {
+    extract_http_endpoint(ws_url)
+}
+
+fn extract_http_endpoint(ws_url: &str) -> String {
+    let without_scheme = ws_url
+        .strip_prefix("ws://")
+        .or_else(|| ws_url.strip_prefix("wss://"))
+        .unwrap_or(ws_url);
+    let host_port = without_scheme.split('/').next().unwrap_or(without_scheme);
+    format!("http://{host_port}")
 }
 
 /// Fetch the webSocketDebuggerUrl from a /json/version endpoint.
@@ -153,53 +217,26 @@ async fn fetch_ws_endpoint(base_url: &str) -> Result<String, BrowserError> {
     Ok(ws_url.to_string())
 }
 
-/// Minimal HTTP GET that returns JSON. Uses tokio's TCP + manual HTTP/1.1.
-/// We avoid pulling in reqwest/hyper to keep dependencies minimal.
+/// HTTP GET that returns JSON. Uses curl for reliability across all Chrome versions.
 async fn reqwest_get_json(
     url: &str,
     timeout: Duration,
 ) -> Result<serde_json::Value, BrowserError> {
-    // Parse URL manually to extract host, port, path
-    let url_str = url.strip_prefix("http://").unwrap_or(url);
-    let (host_port, path) = match url_str.find('/') {
-        Some(i) => (&url_str[..i], &url_str[i..]),
-        None => (url_str, "/"),
-    };
+    let timeout_secs = timeout.as_secs().max(1);
 
-    let addr = format!("{host_port}");
-    let stream = tokio::time::timeout(
-        timeout,
-        tokio::net::TcpStream::connect(&addr),
-    )
-    .await
-    .map_err(|_| BrowserError::NotFound(format!("Timeout connecting to {addr}")))?
-    .map_err(|e| BrowserError::NotFound(format!("Cannot connect to {addr}: {e}")))?;
+    let output = tokio::process::Command::new("curl")
+        .args(["-sS", "--max-time", &timeout_secs.to_string(), url])
+        .output()
+        .await
+        .map_err(|e| BrowserError::NotFound(format!("curl failed: {e}")))?;
 
-    use tokio::io::{AsyncReadExt, AsyncWriteExt};
-    let (mut reader, mut writer) = stream.into_split();
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return Err(BrowserError::NotFound(format!("curl error: {stderr}")));
+    }
 
-    let request = format!(
-        "GET {path} HTTP/1.1\r\nHost: {host_port}\r\nAccept: application/json\r\nConnection: close\r\n\r\n"
-    );
-    writer.write_all(request.as_bytes()).await.map_err(|e| {
-        BrowserError::NotFound(format!("Write failed: {e}"))
-    })?;
-
-    let mut buf = Vec::with_capacity(4096);
-    tokio::time::timeout(timeout, async {
-        reader.read_to_end(&mut buf).await
-    })
-    .await
-    .map_err(|_| BrowserError::NotFound("Timeout reading response".into()))?
-    .map_err(|e| BrowserError::NotFound(format!("Read failed: {e}")))?;
-
-    let response = String::from_utf8_lossy(&buf);
-    let body = response
-        .split("\r\n\r\n")
-        .nth(1)
-        .unwrap_or("");
-
-    serde_json::from_str(body)
+    let body = String::from_utf8_lossy(&output.stdout);
+    serde_json::from_str(&body)
         .map_err(|e| BrowserError::NotFound(format!("Invalid JSON from {url}: {e}")))
 }
 

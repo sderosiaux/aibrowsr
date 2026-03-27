@@ -602,7 +602,7 @@ pub struct AXNode {
     pub properties: Option<Vec<AXProperty>>,
     #[serde(default)]
     pub child_ids: Option<Vec<String>>,
-    #[serde(default)]
+    #[serde(default, rename = "backendDOMNodeId")]
     pub backend_dom_node_id: Option<i64>,
     #[serde(default)]
     pub frame_id: Option<String>,
