@@ -66,7 +66,7 @@ fn help_shows_global_flags() {
     assert_eq!(code, 0);
     assert!(stdout.contains("--browser"));
     assert!(stdout.contains("--connect"));
-    assert!(stdout.contains("--headless"));
+    assert!(stdout.contains("--headed"));
     assert!(stdout.contains("--timeout"));
     assert!(stdout.contains("--ignore-https-errors"));
     assert!(stdout.contains("--page"));
@@ -164,7 +164,7 @@ fn chrome_available() -> bool {
 }
 
 #[test]
-fn headless_goto_and_eval() {
+fn headed_goto_and_eval() {
     if !chrome_available() {
         eprintln!("SKIP: Chrome not found");
         return;
@@ -172,7 +172,7 @@ fn headless_goto_and_eval() {
 
     // Navigate
     let (stdout, stderr, code) = run_cli(&[
-        "--headless",
+        
         "--browser",
         "test-integration",
         "goto",
@@ -191,7 +191,7 @@ fn headless_goto_and_eval() {
 
     // Eval on same browser
     let (stdout, _, code) = run_cli(&[
-        "--headless",
+        
         "--browser",
         "test-integration",
         "eval",
@@ -210,14 +210,14 @@ fn headless_goto_and_eval() {
 }
 
 #[test]
-fn headless_inspect_returns_uids() {
+fn headed_inspect_returns_uids() {
     if !chrome_available() {
         eprintln!("SKIP: Chrome not found");
         return;
     }
 
     let (_, _, code) = run_cli(&[
-        "--headless",
+        
         "--browser",
         "test-inspect",
         "goto",
@@ -230,7 +230,7 @@ fn headless_inspect_returns_uids() {
     }
 
     let (stdout, _, code) = run_cli(&[
-        "--headless",
+        
         "--browser",
         "test-inspect",
         "inspect",
@@ -244,14 +244,14 @@ fn headless_inspect_returns_uids() {
 }
 
 #[test]
-fn headless_screenshot_returns_path() {
+fn headed_screenshot_returns_path() {
     if !chrome_available() {
         eprintln!("SKIP: Chrome not found");
         return;
     }
 
     let (_, _, code) = run_cli(&[
-        "--headless",
+        
         "--browser",
         "test-screenshot",
         "goto",
@@ -264,7 +264,7 @@ fn headless_screenshot_returns_path() {
     }
 
     let (stdout, _, code) = run_cli(&[
-        "--headless",
+        
         "--browser",
         "test-screenshot",
         "screenshot",
@@ -287,14 +287,14 @@ fn headless_screenshot_returns_path() {
 }
 
 #[test]
-fn headless_tabs_lists_pages() {
+fn headed_tabs_lists_pages() {
     if !chrome_available() {
         eprintln!("SKIP: Chrome not found");
         return;
     }
 
     let (_, _, code) = run_cli(&[
-        "--headless",
+        
         "--browser",
         "test-tabs",
         "goto",
@@ -307,7 +307,7 @@ fn headless_tabs_lists_pages() {
     }
 
     let (stdout, _, code) = run_cli(&[
-        "--headless",
+        
         "--browser",
         "test-tabs",
         "tabs",

@@ -17,9 +17,15 @@ pub struct Snapshot {
 /// Calls `Accessibility.getFullAXTree` via CDP, formats the tree into
 /// a compact text representation with uid identifiers, and builds the
 /// uid → ElementRef mapping.
+///
+/// If `focus_uid` is provided (e.g. "e5"), the output is scoped to the
+/// subtree rooted at that element. `max_depth` limits how deep the tree
+/// is rendered (0 = root only).
 pub async fn take_snapshot(
     client: &CdpClient,
     verbose: bool,
+    max_depth: Option<usize>,
+    focus_uid: Option<&str>,
 ) -> Result<Snapshot, CdpClientError> {
     // Enable accessibility domain
     client
@@ -30,7 +36,7 @@ pub async fn take_snapshot(
         .call("Accessibility.getFullAXTree", serde_json::json!({}))
         .await?;
 
-    let (text, uid_map) = format_ax_tree(&result.nodes, verbose);
+    let (text, uid_map) = format_ax_tree(&result.nodes, verbose, max_depth, focus_uid);
 
     Ok(Snapshot { text, uid_map })
 }
@@ -39,11 +45,16 @@ pub async fn take_snapshot(
 ///
 /// CDP returns a flat list of AXNodes with parent/child relationships
 /// via `parentId` and `childIds`. We reconstruct the tree and format it.
-fn format_ax_tree(nodes: &[AXNode], verbose: bool) -> (String, HashMap<String, ElementRef>) {
-    let mut uid_map = HashMap::new();
-    let mut output = String::new();
-    let mut uid_counter: u32 = 0;
-
+///
+/// When `focus_uid` is set, we first do a full pass to assign uids (so
+/// the numbering matches a normal inspect), then find the node whose uid
+/// matches and re-render only that subtree from depth 0.
+fn format_ax_tree(
+    nodes: &[AXNode],
+    verbose: bool,
+    max_depth: Option<usize>,
+    focus_uid: Option<&str>,
+) -> (String, HashMap<String, ElementRef>) {
     // Build lookup: nodeId → AXNode
     let node_by_id: HashMap<&str, &AXNode> = nodes
         .iter()
@@ -56,17 +67,72 @@ fn format_ax_tree(nodes: &[AXNode], verbose: bool) -> (String, HashMap<String, E
         .find(|n| n.parent_id.is_none())
         .map(|n| n.node_id.as_str());
 
-    if let Some(root_id) = root_id {
-        format_node(
+    let Some(root_id) = root_id else {
+        return (String::new(), HashMap::new());
+    };
+
+    if let Some(focus) = focus_uid {
+        // First pass: assign uids without max_depth to find the target node
+        let mut uid_map_full = HashMap::new();
+        let mut uid_counter: u32 = 0;
+        let mut discard = String::new();
+        // Map uid → AXNode nodeId so we can find the subtree root
+        let mut uid_to_node_id: HashMap<String, String> = HashMap::new();
+        format_node_with_tracking(
             root_id,
             &node_by_id,
             0,
             verbose,
+            None, // no depth limit for uid assignment
             &mut uid_counter,
-            &mut uid_map,
-            &mut output,
+            &mut uid_map_full,
+            &mut discard,
+            &mut uid_to_node_id,
+        );
+
+        // Find the AXNode nodeId for the focus uid
+        let focus_node_id = uid_to_node_id.get(focus);
+        if let Some(focus_node_id) = focus_node_id {
+            // Second pass: render only the subtree
+            let mut uid_map = HashMap::new();
+            let mut output = String::new();
+            let mut uid_counter2: u32 = 0;
+            let mut tracking2: HashMap<String, String> = HashMap::new();
+            format_node_with_tracking(
+                focus_node_id,
+                &node_by_id,
+                0, // reset depth to 0
+                verbose,
+                max_depth,
+                &mut uid_counter2,
+                &mut uid_map,
+                &mut output,
+                &mut tracking2,
+            );
+            return (output, uid_map);
+        }
+
+        // uid not found — fall through to full tree
+        return (
+            format!("uid={focus} not found in accessibility tree\n"),
+            uid_map_full,
         );
     }
+
+    // Normal (no focus_uid) path
+    let mut uid_map = HashMap::new();
+    let mut output = String::new();
+    let mut uid_counter: u32 = 0;
+    format_node(
+        root_id,
+        &node_by_id,
+        0,
+        verbose,
+        max_depth,
+        &mut uid_counter,
+        &mut uid_map,
+        &mut output,
+    );
 
     (output, uid_map)
 }
@@ -76,9 +142,27 @@ fn format_node(
     nodes: &HashMap<&str, &AXNode>,
     depth: usize,
     verbose: bool,
+    max_depth: Option<usize>,
     uid_counter: &mut u32,
     uid_map: &mut HashMap<String, ElementRef>,
     output: &mut String,
+) {
+    let mut discard: HashMap<String, String> = HashMap::new();
+    format_node_with_tracking(
+        node_id, nodes, depth, verbose, max_depth, uid_counter, uid_map, output, &mut discard,
+    );
+}
+
+fn format_node_with_tracking(
+    node_id: &str,
+    nodes: &HashMap<&str, &AXNode>,
+    depth: usize,
+    verbose: bool,
+    max_depth: Option<usize>,
+    uid_counter: &mut u32,
+    uid_map: &mut HashMap<String, ElementRef>,
+    output: &mut String,
+    uid_to_node_id: &mut HashMap<String, String>,
 ) {
     let Some(node) = nodes.get(node_id) else {
         return;
@@ -89,7 +173,7 @@ fn format_node(
         // Still recurse into children — some ignored nodes have visible children
         if let Some(child_ids) = &node.child_ids {
             for child_id in child_ids {
-                format_node(child_id, nodes, depth, verbose, uid_counter, uid_map, output);
+                format_node_with_tracking(child_id, nodes, depth, verbose, max_depth, uid_counter, uid_map, output, uid_to_node_id);
             }
         }
         return;
@@ -103,7 +187,7 @@ fn format_node(
     if !verbose && NOISE_ROLES.contains(&role) {
         if let Some(child_ids) = &node.child_ids {
             for child_id in child_ids {
-                format_node(child_id, nodes, depth, verbose, uid_counter, uid_map, output);
+                format_node_with_tracking(child_id, nodes, depth, verbose, max_depth, uid_counter, uid_map, output, uid_to_node_id);
             }
         }
         return;
@@ -128,7 +212,7 @@ fn format_node(
     if !verbose && role == "generic" && name.is_empty() {
         if let Some(child_ids) = &node.child_ids {
             for child_id in child_ids {
-                format_node(child_id, nodes, depth, verbose, uid_counter, uid_map, output);
+                format_node_with_tracking(child_id, nodes, depth, verbose, max_depth, uid_counter, uid_map, output, uid_to_node_id);
             }
         }
         return;
@@ -137,6 +221,9 @@ fn format_node(
     // Assign uid
     *uid_counter += 1;
     let uid = format!("e{uid_counter}");
+
+    // Track uid → AXNode nodeId for focus_uid lookup
+    uid_to_node_id.insert(uid.clone(), node_id.to_string());
 
     // Register in uid_map if we have a backendDOMNodeId
     if let Some(backend_id) = node.backend_dom_node_id {
@@ -249,17 +336,26 @@ fn format_node(
 
     output.push('\n');
 
+    // Depth limit: skip children if we've reached max_depth
+    if let Some(max) = max_depth {
+        if depth >= max {
+            return;
+        }
+    }
+
     // Recurse children
     if let Some(child_ids) = &node.child_ids {
         for child_id in child_ids {
-            format_node(
+            format_node_with_tracking(
                 child_id,
                 nodes,
                 depth + 1,
                 verbose,
+                max_depth,
                 uid_counter,
                 uid_map,
                 output,
+                uid_to_node_id,
             );
         }
     }
@@ -314,7 +410,7 @@ mod tests {
             },
         ];
 
-        let (text, uid_map) = format_ax_tree(&nodes, false);
+        let (text, uid_map) = format_ax_tree(&nodes, false, None, None);
         assert!(text.contains("uid=e1 heading \"Welcome\" level=1"));
         assert!(uid_map.contains_key("e1"));
         assert_eq!(uid_map["e1"].backend_node_id(), Some(10));
@@ -351,7 +447,7 @@ mod tests {
             },
         ];
 
-        let (text, uid_map) = format_ax_tree(&nodes, false);
+        let (text, uid_map) = format_ax_tree(&nodes, false, None, None);
         assert!(!text.contains("ignored"));
         assert!(text.contains("uid=e1 button \"Click me\" focused"));
         assert_eq!(uid_map.len(), 1);

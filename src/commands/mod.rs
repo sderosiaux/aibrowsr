@@ -5,4 +5,5 @@ pub mod inspect;
 pub mod screenshot;
 pub mod eval;
 pub mod tabs;
+pub mod text;
 pub mod wait;

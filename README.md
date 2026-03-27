@@ -30,7 +30,7 @@ cargo build --release
 
 ```bash
 # Navigate to a page
-aibrowsr --headless goto https://example.com
+aibrowsr goto https://example.com
 
 # Inspect the page (accessibility tree, token-optimized)
 aibrowsr inspect
@@ -87,7 +87,7 @@ aibrowsr talks Chrome DevTools Protocol directly. The a11y tree snapshot assigns
 ```
 --browser <name>         Named browser profile (default: "default")
 --connect [url]          Connect to running Chrome (auto-discover or explicit)
---headless               Launch headless Chromium
+--headed               Show browser window (default is headless)
 --timeout <seconds>      Command timeout (default: 30)
 --ignore-https-errors    Accept self-signed certificates
 ```

@@ -2,7 +2,7 @@ LLM USAGE GUIDE:
   Workflow: inspect -> read uids -> act (click/fill) -> inspect again.
 
   Quick start:
-    aibrowsr --headless goto https://example.com --inspect
+    aibrowsr goto https://example.com --inspect
     aibrowsr click e3 --inspect
     aibrowsr fill e2 "hello@example.com" --inspect
     aibrowsr fill-form e2="user@test.com" e3="pass" --inspect
@@ -10,6 +10,11 @@ LLM USAGE GUIDE:
 
   Key patterns:
     aibrowsr inspect                        # accessibility tree with uid=eN
+    aibrowsr inspect --max-depth 2          # limit tree depth
+    aibrowsr inspect --uid e5               # subtree rooted at e5
+    aibrowsr text                           # extract visible page text
+    aibrowsr text e5                        # extract text from element e5
+    aibrowsr back                           # navigate back in history
     aibrowsr click e4 --inspect             # act + observe in one call
     aibrowsr fill-form e2="a" e3="b"        # batch fill
     aibrowsr eval "JSON.stringify(...)"     # complex DOM queries
