@@ -96,16 +96,32 @@ fn format_node(
     }
 
     let role = node.role_name().unwrap_or("");
-    let name = node.name_value().unwrap_or("");
+    let mut name = node.name_value().unwrap_or("").to_string();
 
-    // Skip "none" role nodes unless verbose
-    if role == "none" && !verbose {
+    // Skip noise roles unless verbose — these repeat parent content and waste tokens
+    const NOISE_ROLES: &[&str] = &["none", "StaticText", "InlineTextBox"];
+    if !verbose && NOISE_ROLES.contains(&role) {
         if let Some(child_ids) = &node.child_ids {
             for child_id in child_ids {
                 format_node(child_id, nodes, depth, verbose, uid_counter, uid_map, output);
             }
         }
         return;
+    }
+
+    // If name is empty and we're filtering noise, pull text from StaticText children
+    if !verbose && name.is_empty() {
+        if let Some(child_ids) = &node.child_ids {
+            let texts: Vec<&str> = child_ids
+                .iter()
+                .filter_map(|cid| nodes.get(cid.as_str()))
+                .filter(|n| n.role_name() == Some("StaticText"))
+                .filter_map(|n| n.name_value())
+                .collect();
+            if !texts.is_empty() {
+                name = texts.join(" ");
+            }
+        }
     }
 
     // Skip generic containers with no name unless verbose
@@ -144,7 +160,7 @@ fn format_node(
 
     if !name.is_empty() {
         output.push_str(" \"");
-        output.push_str(name);
+        output.push_str(&name);
         output.push('"');
     }
 

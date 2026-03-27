@@ -36,10 +36,15 @@ fn help_shows_all_subcommands() {
     assert!(stdout.contains("click"));
     assert!(stdout.contains("fill"));
     assert!(stdout.contains("fill-form"));
-    assert!(stdout.contains("snap"));
+    assert!(stdout.contains("inspect"));
     assert!(stdout.contains("screenshot"));
     assert!(stdout.contains("eval"));
     assert!(stdout.contains("tabs"));
+    assert!(stdout.contains("wait"));
+    assert!(stdout.contains("type"));
+    assert!(stdout.contains("press"));
+    assert!(stdout.contains("scroll"));
+    assert!(stdout.contains("hover"));
     assert!(stdout.contains("close"));
     assert!(stdout.contains("status"));
     assert!(stdout.contains("stop"));
@@ -51,8 +56,8 @@ fn help_includes_llm_guide() {
     let (stdout, _, code) = run_cli(&["--help"]);
     assert_eq!(code, 0);
     assert!(stdout.contains("LLM USAGE GUIDE"));
-    assert!(stdout.contains("snap → read uids → act"));
-    assert!(stdout.contains("--snap"));
+    assert!(stdout.contains("inspect -> read uids -> act"));
+    assert!(stdout.contains("--inspect"));
 }
 
 #[test]
@@ -64,6 +69,7 @@ fn help_shows_global_flags() {
     assert!(stdout.contains("--headless"));
     assert!(stdout.contains("--timeout"));
     assert!(stdout.contains("--ignore-https-errors"));
+    assert!(stdout.contains("--page"));
 }
 
 #[test]
@@ -96,7 +102,7 @@ fn goto_subcommand_help() {
     let (stdout, _, code) = run_cli(&["goto", "--help"]);
     assert_eq!(code, 0);
     assert!(stdout.contains("Navigate to a URL"));
-    assert!(stdout.contains("--snap"));
+    assert!(stdout.contains("--inspect"));
 }
 
 #[test]
@@ -104,7 +110,7 @@ fn click_subcommand_help() {
     let (stdout, _, code) = run_cli(&["click", "--help"]);
     assert_eq!(code, 0);
     assert!(stdout.contains("Click an element by uid"));
-    assert!(stdout.contains("--snap"));
+    assert!(stdout.contains("--inspect"));
 }
 
 #[test]
@@ -112,14 +118,14 @@ fn fill_subcommand_help() {
     let (stdout, _, code) = run_cli(&["fill", "--help"]);
     assert_eq!(code, 0);
     assert!(stdout.contains("Fill an input"));
-    assert!(stdout.contains("--snap"));
+    assert!(stdout.contains("--inspect"));
 }
 
 #[test]
-fn snap_subcommand_help() {
-    let (stdout, _, code) = run_cli(&["snap", "--help"]);
+fn inspect_subcommand_help() {
+    let (stdout, _, code) = run_cli(&["inspect", "--help"]);
     assert_eq!(code, 0);
-    assert!(stdout.contains("accessibility tree snapshot"));
+    assert!(stdout.contains("accessibility tree inspection"));
     assert!(stdout.contains("--verbose"));
 }
 
@@ -204,7 +210,7 @@ fn headless_goto_and_eval() {
 }
 
 #[test]
-fn headless_snap_returns_uids() {
+fn headless_inspect_returns_uids() {
     if !chrome_available() {
         eprintln!("SKIP: Chrome not found");
         return;
@@ -213,7 +219,7 @@ fn headless_snap_returns_uids() {
     let (_, _, code) = run_cli(&[
         "--headless",
         "--browser",
-        "test-snap",
+        "test-inspect",
         "goto",
         "https://example.com",
     ]);
@@ -226,15 +232,15 @@ fn headless_snap_returns_uids() {
     let (stdout, _, code) = run_cli(&[
         "--headless",
         "--browser",
-        "test-snap",
-        "snap",
+        "test-inspect",
+        "inspect",
     ]);
 
     if code == 0 {
-        assert!(stdout.contains("uid=e"), "snap should contain uid=eN: {stdout}");
+        assert!(stdout.contains("uid=e"), "inspect should contain uid=eN: {stdout}");
     }
 
-    let _ = run_cli(&["--browser", "test-snap", "close"]);
+    let _ = run_cli(&["--browser", "test-inspect", "close"]);
 }
 
 #[test]

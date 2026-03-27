@@ -187,7 +187,7 @@ async fn resolve_http_endpoint(endpoint: &str) -> Result<BrowserConnection, Brow
     let ws = fetch_ws_endpoint(endpoint).await.map_err(|_| {
         BrowserError::NotFound(format!(
             "Could not resolve CDP WebSocket from {endpoint}. \
-             If Chrome uses built-in remote debugging, run `dev-browser --connect` \
+             If Chrome uses built-in remote debugging, run `aibrowsr --connect` \
              without a URL for auto-discovery."
         ))
     })?;
@@ -422,8 +422,7 @@ fn find_chromium() -> Result<PathBuf, BrowserError> {
     }
 
     Err(BrowserError::NotFound(
-        "Could not find Chrome or Chromium. Run 'dev-browser install' to download one, \
-         or install Chrome and ensure it's on your PATH."
+        "Could not find Chrome or Chromium. Install Chrome and ensure it's on your PATH."
             .into(),
     ))
 }

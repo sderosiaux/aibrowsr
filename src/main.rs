@@ -10,6 +10,7 @@ mod snapshot;
 use std::collections::HashMap;
 
 use clap::{Parser, Subcommand};
+use serde_json::json;
 
 use crate::browser::BrowserOptions;
 use crate::cdp::client::CdpClient;
@@ -24,8 +25,8 @@ const CLI_LONG_ABOUT: &str = "\
 aibrowsr — browser automation for AI agents. Controls Chrome via CDP.\n\
 Single binary, zero runtime dependencies. Named pages persist between invocations.\n\
 \n\
-Workflow: snap → read uids → act (click/fill) → snap again.\n\
-Use --snap on action commands to combine action + observation in one call.";
+Workflow: inspect → read uids → act (click/fill) → inspect again.\n\
+Use --inspect on action commands to combine action + observation in one call.";
 
 const CLI_AFTER_LONG_HELP: &str = include_str!("../llm-guide.txt");
 
@@ -58,6 +59,14 @@ struct Cli {
     #[arg(long)]
     ignore_https_errors: bool,
 
+    /// Output structured JSON instead of text
+    #[arg(long)]
+    json: bool,
+
+    /// Named page/tab within the browser (default: "default")
+    #[arg(long, default_value = "default")]
+    page: String,
+
     #[command(subcommand)]
     command: Command,
 }
@@ -68,18 +77,18 @@ enum Command {
     Goto {
         /// Target URL
         url: String,
-        /// Take a snapshot after navigation
+        /// Inspect page after navigation
         #[arg(long)]
-        snap: bool,
+        inspect: bool,
     },
 
     /// Click an element by uid
     Click {
         /// Element uid (e.g. "e5")
         uid: String,
-        /// Take a snapshot after clicking
+        /// Inspect page after clicking
         #[arg(long)]
-        snap: bool,
+        inspect: bool,
     },
 
     /// Fill an input element by uid
@@ -88,9 +97,9 @@ enum Command {
         uid: String,
         /// Value to fill
         value: String,
-        /// Take a snapshot after filling
+        /// Inspect page after filling
         #[arg(long)]
-        snap: bool,
+        inspect: bool,
     },
 
     /// Fill multiple form fields at once
@@ -98,13 +107,13 @@ enum Command {
     FillForm {
         /// uid=value pairs (e.g. "e5=hello" "e7=world")
         pairs: Vec<String>,
-        /// Take a snapshot after filling
+        /// Inspect page after filling
         #[arg(long)]
-        snap: bool,
+        inspect: bool,
     },
 
-    /// Take an accessibility tree snapshot
-    Snap {
+    /// Take an accessibility tree inspection
+    Inspect {
         /// Include ignored/generic nodes
         #[arg(long)]
         verbose: bool,
@@ -121,6 +130,41 @@ enum Command {
     Eval {
         /// JS expression to evaluate
         expression: String,
+    },
+
+    /// Wait for a condition (text, url, or selector)
+    Wait {
+        /// What to wait for: "text", "url", or "selector"
+        what: String,
+        /// Pattern to match
+        pattern: String,
+        /// Timeout in seconds
+        #[arg(long, default_value = "10")]
+        timeout: u64,
+    },
+
+    /// Type text into the focused element
+    Type {
+        /// Text to type
+        text: String,
+    },
+
+    /// Press a key (Enter, Tab, Escape, etc.)
+    Press {
+        /// Key name
+        key: String,
+    },
+
+    /// Scroll the page or an element into view
+    Scroll {
+        /// "up", "down", or a uid to scroll into view
+        target: String,
+    },
+
+    /// Hover over an element by uid
+    Hover {
+        /// Element uid (e.g. "e5")
+        uid: String,
     },
 
     /// List open browser tabs
@@ -177,9 +221,24 @@ async fn main() {
     });
 
     let cli = Cli::parse();
+    let json_mode = cli.json;
 
     if let Err(e) = run(cli).await {
-        eprintln!("error: {e}");
+        if json_mode {
+            let msg = e.to_string();
+            let hint = error_hint(&msg);
+            let mut obj = json!({"ok": false, "error": msg});
+            if let Some(h) = hint {
+                obj["hint"] = json!(h);
+            }
+            println!("{}", serde_json::to_string(&obj).unwrap_or_default());
+        } else {
+            let msg = e.to_string();
+            eprintln!("error: {msg}");
+            if let Some(hint) = error_hint(&msg) {
+                eprintln!("hint: {hint}");
+            }
+        }
         std::process::exit(1);
     }
 }
@@ -197,15 +256,15 @@ async fn run(cli: Cli) -> Result<(), Box<dyn std::error::Error>> {
         }
 
         Command::Status => {
-            return cmd_status().await;
+            return cmd_status(cli.json).await;
         }
 
         Command::Stop => {
-            return cmd_stop().await;
+            return cmd_stop(cli.json).await;
         }
 
         Command::Close => {
-            return cmd_close(&cli.browser).await;
+            return cmd_close(&cli.browser, cli.json).await;
         }
 
         _ => {}
@@ -267,7 +326,7 @@ async fn run(cli: Cli) -> Result<(), Box<dyn std::error::Error>> {
             conn.pid,
             cli.headless,
         );
-        resolve_page_target(&browser_client, browser_session).await?
+        resolve_page_target(&browser_client, browser_session, &cli.page).await?
     };
     // Save session immediately so Chrome PID is persisted even if CLI crashes later
     let _ = session::save_session(&store);
@@ -279,57 +338,93 @@ async fn run(cli: Cli) -> Result<(), Box<dyn std::error::Error>> {
     client.enable("Runtime").await?;
 
     // Execute command
+    let json_mode = cli.json;
     match cli.command {
-        Command::Goto { url, snap } => {
+        Command::Goto { url, inspect } => {
             let result = commands::goto::run(&client, &url, cli.timeout).await?;
-            println!("{} — {}", result.url, result.title);
 
-            // Update session
             let page = session::ensure_page(
                 store.browsers.get_mut(&cli.browser).unwrap(),
-                "default",
+                &cli.page,
                 &target_id,
             );
 
-            if snap {
-                let snapshot = commands::snap::run(&client, false).await?;
-                page.uid_map = snapshot.uid_map;
-                println!("{}", snapshot.text);
+            if json_mode {
+                let mut obj = json!({"ok": true, "url": result.url, "title": result.title});
+                if inspect {
+                    let snapshot = commands::inspect::run(&client, false).await?;
+                    obj["snapshot"] = json!(snapshot.text);
+                    page.uid_map = snapshot.uid_map;
+                }
+                json_output(&obj);
+            } else {
+                println!("{} — {}", result.url, result.title);
+                if inspect {
+                    let snapshot = commands::inspect::run(&client, false).await?;
+                    page.uid_map = snapshot.uid_map;
+                    println!("{}", snapshot.text);
+                }
             }
         }
 
-        Command::Click { uid, snap } => {
-            let uid_map = get_uid_map(&store, &cli.browser);
+        Command::Click { uid, inspect } => {
+            let uid_map = get_uid_map(&store, &cli.browser, &cli.page);
             let msg = commands::click::run(&client, &uid_map, &uid).await?;
-            println!("{msg}");
 
-            if snap {
-                let snapshot = commands::snap::run(&client, false).await?;
-                if let Some(browser_s) = store.browsers.get_mut(&cli.browser) {
-                    let page = session::ensure_page(browser_s, "default", &target_id);
-                    page.uid_map = snapshot.uid_map;
+            if json_mode {
+                let mut obj = json!({"ok": true, "message": msg});
+                if inspect {
+                    let snapshot = commands::inspect::run(&client, false).await?;
+                    obj["snapshot"] = json!(snapshot.text);
+                    if let Some(browser_s) = store.browsers.get_mut(&cli.browser) {
+                        let page = session::ensure_page(browser_s, &cli.page, &target_id);
+                        page.uid_map = snapshot.uid_map;
+                    }
                 }
-                println!("{}", snapshot.text);
+                json_output(&obj);
+            } else {
+                println!("{msg}");
+                if inspect {
+                    let snapshot = commands::inspect::run(&client, false).await?;
+                    if let Some(browser_s) = store.browsers.get_mut(&cli.browser) {
+                        let page = session::ensure_page(browser_s, &cli.page, &target_id);
+                        page.uid_map = snapshot.uid_map;
+                    }
+                    println!("{}", snapshot.text);
+                }
             }
         }
 
-        Command::Fill { uid, value, snap } => {
-            let uid_map = get_uid_map(&store, &cli.browser);
+        Command::Fill { uid, value, inspect } => {
+            let uid_map = get_uid_map(&store, &cli.browser, &cli.page);
             let msg = commands::fill::run(&client, &uid_map, &uid, &value).await?;
-            println!("{msg}");
 
-            if snap {
-                let snapshot = commands::snap::run(&client, false).await?;
-                if let Some(browser_s) = store.browsers.get_mut(&cli.browser) {
-                    let page = session::ensure_page(browser_s, "default", &target_id);
-                    page.uid_map = snapshot.uid_map;
+            if json_mode {
+                let mut obj = json!({"ok": true, "message": msg});
+                if inspect {
+                    let snapshot = commands::inspect::run(&client, false).await?;
+                    obj["snapshot"] = json!(snapshot.text);
+                    if let Some(browser_s) = store.browsers.get_mut(&cli.browser) {
+                        let page = session::ensure_page(browser_s, &cli.page, &target_id);
+                        page.uid_map = snapshot.uid_map;
+                    }
                 }
-                println!("{}", snapshot.text);
+                json_output(&obj);
+            } else {
+                println!("{msg}");
+                if inspect {
+                    let snapshot = commands::inspect::run(&client, false).await?;
+                    if let Some(browser_s) = store.browsers.get_mut(&cli.browser) {
+                        let page = session::ensure_page(browser_s, &cli.page, &target_id);
+                        page.uid_map = snapshot.uid_map;
+                    }
+                    println!("{}", snapshot.text);
+                }
             }
         }
 
-        Command::FillForm { pairs, snap } => {
-            let uid_map = get_uid_map(&store, &cli.browser);
+        Command::FillForm { pairs, inspect } => {
+            let uid_map = get_uid_map(&store, &cli.browser, &cli.page);
             let parsed: Result<Vec<(&str, &str)>, _> = pairs
                 .iter()
                 .map(|p| {
@@ -340,44 +435,173 @@ async fn run(cli: Cli) -> Result<(), Box<dyn std::error::Error>> {
             let parsed = parsed?;
 
             let msg = commands::fill::run_form(&client, &uid_map, &parsed).await?;
-            println!("{msg}");
 
-            if snap {
-                let snapshot = commands::snap::run(&client, false).await?;
-                if let Some(browser_s) = store.browsers.get_mut(&cli.browser) {
-                    let page = session::ensure_page(browser_s, "default", &target_id);
-                    page.uid_map = snapshot.uid_map;
+            if json_mode {
+                let mut obj = json!({"ok": true, "message": msg});
+                if inspect {
+                    let snapshot = commands::inspect::run(&client, false).await?;
+                    obj["snapshot"] = json!(snapshot.text);
+                    if let Some(browser_s) = store.browsers.get_mut(&cli.browser) {
+                        let page = session::ensure_page(browser_s, &cli.page, &target_id);
+                        page.uid_map = snapshot.uid_map;
+                    }
                 }
+                json_output(&obj);
+            } else {
+                println!("{msg}");
+                if inspect {
+                    let snapshot = commands::inspect::run(&client, false).await?;
+                    if let Some(browser_s) = store.browsers.get_mut(&cli.browser) {
+                        let page = session::ensure_page(browser_s, &cli.page, &target_id);
+                        page.uid_map = snapshot.uid_map;
+                    }
+                    println!("{}", snapshot.text);
+                }
+            }
+        }
+
+        Command::Inspect { verbose } => {
+            let snapshot = commands::inspect::run(&client, verbose).await?;
+            if let Some(browser_s) = store.browsers.get_mut(&cli.browser) {
+                let page = session::ensure_page(browser_s, &cli.page, &target_id);
+                page.uid_map = snapshot.uid_map;
+            }
+            if json_mode {
+                json_output(&json!({"ok": true, "snapshot": snapshot.text}));
+            } else {
                 println!("{}", snapshot.text);
             }
         }
 
-        Command::Snap { verbose } => {
-            let snapshot = commands::snap::run(&client, verbose).await?;
-            if let Some(browser_s) = store.browsers.get_mut(&cli.browser) {
-                let page = session::ensure_page(browser_s, "default", &target_id);
-                page.uid_map = snapshot.uid_map;
-            }
-            println!("{}", snapshot.text);
-        }
-
         Command::Screenshot { filename } => {
-            let path = commands::screenshot::run(
-                &client,
-                filename.as_deref(),
-            )
-            .await?;
-            println!("{path}");
+            let path = commands::screenshot::run(&client, filename.as_deref()).await?;
+            if json_mode {
+                json_output(&json!({"ok": true, "path": path}));
+            } else {
+                println!("{path}");
+            }
         }
 
         Command::Eval { expression } => {
-            let result = commands::eval::run(&client, &expression).await?;
-            println!("{result}");
+            if json_mode {
+                let raw = commands::eval::run_raw(&client, &expression).await?;
+                json_output(&json!({"ok": true, "result": raw}));
+            } else {
+                let result = commands::eval::run(&client, &expression).await?;
+                println!("{result}");
+            }
+        }
+
+        Command::Wait { what, pattern, timeout } => {
+            let msg = commands::wait::run(&client, &what, &pattern, timeout).await?;
+            if json_mode {
+                json_output(&json!({"ok": true, "message": msg}));
+            } else {
+                println!("{msg}");
+            }
+        }
+
+        Command::Type { text } => {
+            crate::element::type_text(&client, &text).await?;
+            let msg = format!("Typed {} chars", text.len());
+            if json_mode {
+                json_output(&json!({"ok": true, "message": msg}));
+            } else {
+                println!("{msg}");
+            }
+        }
+
+        Command::Press { key } => {
+            crate::element::press_key(&client, &key).await?;
+            let msg = format!("Pressed {key}");
+            if json_mode {
+                json_output(&json!({"ok": true, "message": msg}));
+            } else {
+                println!("{msg}");
+            }
+        }
+
+        Command::Scroll { target } => {
+            let msg = match target.as_str() {
+                "down" => {
+                    let _: serde_json::Value = client
+                        .call("Runtime.evaluate", json!({
+                            "expression": "window.scrollBy(0, 500)",
+                            "returnByValue": true,
+                        }))
+                        .await?;
+                    "Scrolled down".to_string()
+                }
+                "up" => {
+                    let _: serde_json::Value = client
+                        .call("Runtime.evaluate", json!({
+                            "expression": "window.scrollBy(0, -500)",
+                            "returnByValue": true,
+                        }))
+                        .await?;
+                    "Scrolled up".to_string()
+                }
+                uid => {
+                    let uid_map = get_uid_map(&store, &cli.browser, &cli.page);
+                    let element_ref = uid_map.get(uid).ok_or_else(|| {
+                        format!("Element uid={uid} not found. Run 'aibrowsr inspect' to get fresh uids.")
+                    })?;
+                    let backend_node_id = element_ref.backend_node_id().ok_or_else(|| {
+                        format!("Element uid={uid} has no resolvable backend node.")
+                    })?;
+                    let resolve_result: crate::cdp::types::ResolveNodeResult = client
+                        .call(
+                            "DOM.resolveNode",
+                            crate::cdp::types::ResolveNodeParams {
+                                node_id: None,
+                                backend_node_id: Some(backend_node_id),
+                                object_group: Some("aibrowsr".into()),
+                                execution_context_id: None,
+                            },
+                        )
+                        .await?;
+                    let object_id = resolve_result.object.object_id.ok_or_else(|| {
+                        format!("Element uid={uid} could not be resolved to a JS object.")
+                    })?;
+                    let _: serde_json::Value = client
+                        .call(
+                            "Runtime.callFunctionOn",
+                            json!({
+                                "objectId": object_id,
+                                "functionDeclaration": "function() { this.scrollIntoView({block: 'center'}); }",
+                                "returnByValue": true,
+                            }),
+                        )
+                        .await?;
+                    format!("Scrolled uid={uid} into view")
+                }
+            };
+            if json_mode {
+                json_output(&json!({"ok": true, "message": msg}));
+            } else {
+                println!("{msg}");
+            }
+        }
+
+        Command::Hover { uid } => {
+            let uid_map = get_uid_map(&store, &cli.browser, &cli.page);
+            crate::element::hover(&client, &uid_map, &uid).await?;
+            let msg = format!("Hovered uid={uid}");
+            if json_mode {
+                json_output(&json!({"ok": true, "message": msg}));
+            } else {
+                println!("{msg}");
+            }
         }
 
         Command::Tabs => {
-            let output = commands::tabs::run(&browser_client).await?;
-            print!("{output}");
+            if json_mode {
+                let tabs = commands::tabs::run_structured(&browser_client).await?;
+                json_output(&json!({"ok": true, "tabs": tabs}));
+            } else {
+                let output = commands::tabs::run(&browser_client).await?;
+                print!("{output}");
+            }
         }
 
         // Already handled above
@@ -396,43 +620,80 @@ async fn run(cli: Cli) -> Result<(), Box<dyn std::error::Error>> {
 // Helpers
 // ---------------------------------------------------------------------------
 
+/// Print a `serde_json::Value` as a single compact JSON line to stdout.
+fn json_output(value: &serde_json::Value) {
+    println!("{}", serde_json::to_string(value).unwrap_or_default());
+}
+
+/// Provide a contextual hint for common errors.
+fn error_hint(msg: &str) -> Option<&'static str> {
+    if msg.contains("Connection refused") || msg.contains("No such file") {
+        Some("Is Chrome running? Try: aibrowsr goto <url>")
+    } else if msg.contains("uid=") && msg.contains("not found") {
+        Some("Run `aibrowsr inspect` to refresh element uids")
+    } else if msg.contains("Navigation failed") {
+        Some("Check the URL is valid and the page is reachable")
+    } else if msg.contains("No snapshot") || msg.contains("No inspect") || msg.contains("uid_map is empty") {
+        Some("Run 'aibrowsr inspect' first")
+    } else if msg.contains("Timeout") || msg.contains("timeout") {
+        Some("Use --timeout N for slow pages")
+    } else if msg.contains("not interactable") || msg.contains("no visible box model") {
+        Some("Element may be hidden. Try scrolling.")
+    } else {
+        None
+    }
+}
+
 /// Get the uid_map from the current session, or empty if none.
-fn get_uid_map(store: &SessionStore, browser_name: &str) -> HashMap<String, ElementRef> {
+fn get_uid_map(store: &SessionStore, browser_name: &str, page_name: &str) -> HashMap<String, ElementRef> {
     store
         .browsers
         .get(browser_name)
-        .and_then(|b| b.pages.get("default"))
+        .and_then(|b| b.pages.get(page_name))
         .map(|p| p.uid_map.clone())
         .unwrap_or_default()
 }
 
 /// Resolve the page target id: use existing from session, or pick first page, or create one.
+///
+/// For the "default" page: reuse the first existing Chrome tab.
+/// For named pages: always create a new tab (proper multi-tab support).
 async fn resolve_page_target(
     client: &CdpClient,
     browser_session: &mut BrowserSession,
+    page_name: &str,
 ) -> Result<String, Box<dyn std::error::Error>> {
-    // Check if we have a stored page
-    if let Some(page) = browser_session.pages.get("default") {
+    // Check if we have a stored page with this name
+    if let Some(page) = browser_session.pages.get(page_name) {
         return Ok(page.target_id.clone());
     }
 
-    // List targets and pick the first page
-    let result: crate::cdp::types::GetTargetsResult = client
-        .call("Target.getTargets", serde_json::json!({}))
-        .await?;
+    // For "default" page: try to reuse the first existing Chrome tab
+    if page_name == "default" {
+        let result: crate::cdp::types::GetTargetsResult = client
+            .call("Target.getTargets", serde_json::json!({}))
+            .await?;
 
-    let page_target = result
-        .target_infos
-        .iter()
-        .find(|t| t.target_type == "page");
+        // Only reuse tabs that aren't already claimed by another named page
+        let claimed_targets: std::collections::HashSet<&str> = browser_session
+            .pages
+            .values()
+            .map(|p| p.target_id.as_str())
+            .collect();
 
-    if let Some(target) = page_target {
-        let target_id = target.target_id.clone();
-        session::ensure_page(browser_session, "default", &target_id);
-        return Ok(target_id);
+        let available = result
+            .target_infos
+            .iter()
+            .find(|t| t.target_type == "page" && !claimed_targets.contains(t.target_id.as_str()));
+
+        if let Some(target) = available {
+            let target_id = target.target_id.clone();
+            session::ensure_page(browser_session, page_name, &target_id);
+            return Ok(target_id);
+        }
     }
 
-    // No pages — create one
+    // Create a new tab for this named page
     let create_result: crate::cdp::types::CreateTargetResult = client
         .call(
             "Target.createTarget",
@@ -447,44 +708,69 @@ async fn resolve_page_target(
         .await?;
 
     let target_id = create_result.target_id;
-    session::ensure_page(browser_session, "default", &target_id);
+    session::ensure_page(browser_session, page_name, &target_id);
     Ok(target_id)
 }
 
-async fn cmd_status() -> Result<(), Box<dyn std::error::Error>> {
+async fn cmd_status(json_mode: bool) -> Result<(), Box<dyn std::error::Error>> {
     let store = session::load_session()?;
-
-    if store.browsers.is_empty() {
-        println!("No active browser sessions.");
-    } else {
-        for (name, browser) in &store.browsers {
-            let status = if let Some(pid) = browser.pid {
-                format!("pid={pid}")
-            } else {
-                "external".into()
-            };
-            let mode = if browser.headless { "headless" } else { "headed" };
-            println!(
-                "browser={name}  {status}  {mode}  pages={}  ws={}",
-                browser.pages.len(),
-                browser.ws_endpoint
-            );
-        }
-    }
-
     let daemon_alive = session::daemon_socket_exists();
-    println!(
-        "daemon: {}",
-        if daemon_alive { "running" } else { "stopped" }
-    );
+
+    if json_mode {
+        let browsers: Vec<serde_json::Value> = store
+            .browsers
+            .iter()
+            .map(|(name, b)| {
+                json!({
+                    "name": name,
+                    "pid": b.pid,
+                    "headless": b.headless,
+                    "pages": b.pages.len(),
+                    "ws": b.ws_endpoint,
+                })
+            })
+            .collect();
+        json_output(&json!({
+            "ok": true,
+            "browsers": browsers,
+            "daemon": if daemon_alive { "running" } else { "stopped" },
+        }));
+    } else {
+        if store.browsers.is_empty() {
+            println!("No active browser sessions.");
+        } else {
+            for (name, browser) in &store.browsers {
+                let status = if let Some(pid) = browser.pid {
+                    format!("pid={pid}")
+                } else {
+                    "external".into()
+                };
+                let mode = if browser.headless { "headless" } else { "headed" };
+                println!(
+                    "browser={name}  {status}  {mode}  pages={}  ws={}",
+                    browser.pages.len(),
+                    browser.ws_endpoint
+                );
+            }
+        }
+
+        println!(
+            "daemon: {}",
+            if daemon_alive { "running" } else { "stopped" }
+        );
+    }
 
     Ok(())
 }
 
-async fn cmd_stop() -> Result<(), Box<dyn std::error::Error>> {
+async fn cmd_stop(json_mode: bool) -> Result<(), Box<dyn std::error::Error>> {
     let socket_path = session::daemon_socket_path()?;
     if !socket_path.exists() {
-        println!("Daemon is not running.");
+        if json_mode {
+            json_output(&json!({"ok": true, "message": "Daemon is not running."}));
+        } else {
+            println!("Daemon is not running.");
+        }
         return Ok(());
     }
 
@@ -501,16 +787,20 @@ async fn cmd_stop() -> Result<(), Box<dyn std::error::Error>> {
     let mut buf = Vec::new();
     let _ = stream.read_to_end(&mut buf).await;
 
-    println!("Daemon stopped.");
+    if json_mode {
+        json_output(&json!({"ok": true, "message": "Daemon stopped."}));
+    } else {
+        println!("Daemon stopped.");
+    }
     Ok(())
 }
 
-async fn cmd_close(browser_name: &str) -> Result<(), Box<dyn std::error::Error>> {
+async fn cmd_close(browser_name: &str, json_mode: bool) -> Result<(), Box<dyn std::error::Error>> {
     let mut store = session::load_session()?;
 
     let browser = store.browsers.remove(browser_name);
 
-    match browser {
+    let message = match browser {
         Some(b) => {
             // Kill the browser process if we manage it
             if let Some(pid) = b.pid {
@@ -526,14 +816,20 @@ async fn cmd_close(browser_name: &str) -> Result<(), Box<dyn std::error::Error>>
                 {
                     let _ = pid;
                 }
-                println!("Closed browser={browser_name} (pid={pid})");
+                format!("Closed browser={browser_name} (pid={pid})")
             } else {
-                println!("Removed external browser session: {browser_name}");
+                format!("Removed external browser session: {browser_name}")
             }
         }
         None => {
-            println!("No browser session named '{browser_name}'.");
+            format!("No browser session named '{browser_name}'.")
         }
+    };
+
+    if json_mode {
+        json_output(&json!({"ok": true, "message": message}));
+    } else {
+        println!("{message}");
     }
 
     session::save_session(&store)?;

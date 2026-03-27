@@ -6,7 +6,7 @@ Browser automation for AI agents. Single Rust binary, zero runtime dependencies,
 
 Existing browser automation tools (Playwright, Puppeteer, Selenium) carry heavy runtimes (Node.js, Python) and weren't designed for AI agents. Agents need:
 - **Minimum tokens** — a11y tree snapshots instead of raw HTML (~50 tokens vs ~2000)
-- **Minimum round-trips** — `--snap` flag returns updated page state with every action
+- **Minimum round-trips** — `--inspect` flag returns updated page state with every action
 - **Zero setup** — single binary, no npm install, no runtime dependencies
 - **Persistent sessions** — login once, stay logged in across invocations
 
@@ -32,13 +32,13 @@ cargo build --release
 # Navigate to a page
 aibrowsr --headless goto https://example.com
 
-# Take an accessibility tree snapshot (token-optimized)
-aibrowsr snap
+# Inspect the page (accessibility tree, token-optimized)
+aibrowsr inspect
 # → uid=e1 heading "Example Domain" level=1
 #   uid=e2 link "More information..." focusable
 
 # Click an element by uid
-aibrowsr click e2 --snap
+aibrowsr click e2 --inspect
 
 # Fill a form field
 aibrowsr fill e5 "user@test.com"
@@ -71,10 +71,10 @@ aibrowsr talks Chrome DevTools Protocol directly. The a11y tree snapshot assigns
 | Command | Description |
 |---------|------------|
 | `goto <url>` | Navigate to URL |
-| `snap [--verbose]` | Accessibility tree snapshot with uids |
-| `click <uid> [--snap]` | Click element by uid |
-| `fill <uid> <value> [--snap]` | Fill input by uid |
-| `fill-form <uid=val>... [--snap]` | Batch fill multiple fields |
+| `inspect [--verbose]` | Inspect page accessibility tree with uids |
+| `click <uid> [--inspect]` | Click element by uid |
+| `fill <uid> <value> [--inspect]` | Fill input by uid |
+| `fill-form <uid=val>... [--inspect]` | Batch fill multiple fields |
 | `eval <expression>` | Evaluate JS in page context |
 | `screenshot [--filename]` | Capture screenshot, return file path |
 | `tabs` | List open browser tabs |
@@ -92,13 +92,13 @@ aibrowsr talks Chrome DevTools Protocol directly. The a11y tree snapshot assigns
 --ignore-https-errors    Accept self-signed certificates
 ```
 
-## The Snap → Act → Snap Loop
+## The Inspect → Act → Inspect Loop
 
 The core workflow for agents:
 
 ```bash
-# 1. Snap to discover the page
-aibrowsr snap
+# 1. Inspect to discover the page
+aibrowsr inspect
 # → uid=e1 heading "Login" level=1
 #   uid=e2 textbox "Email" value="" focusable
 #   uid=e3 textbox "Password" value="" focusable
@@ -108,15 +108,15 @@ aibrowsr snap
 aibrowsr fill e2 "user@test.com"
 aibrowsr fill e3 "password123"
 
-# 3. Click with --snap to get updated state in one call
-aibrowsr click e4 --snap
+# 3. Click with --inspect to get updated state in one call
+aibrowsr click e4 --inspect
 # → Clicked uid=e4
 # → uid=e1 heading "Dashboard" level=1
 #   uid=e2 navigation "Main menu"
 #   ...
 ```
 
-The `--snap` flag eliminates one round-trip per interaction — the agent gets the action result and updated page state in a single call.
+The `--inspect` flag eliminates one round-trip per interaction — the agent gets the action result and updated page state in a single call.
 
 ## Using with AI Agents
 
@@ -160,7 +160,7 @@ google-chrome --remote-debugging-port=9222
 | Binary size | ~10 MB | ~200 MB | ~200 MB | ~200 MB |
 | Startup | ~10ms | ~500ms | ~500ms | ~500ms |
 | Element targeting | uid (a11y tree) | CSS selectors | CSS selectors | uid (a11y tree) |
-| Batching | --snap flag | 1 action/call | script mode | 1 action/call |
+| Batching | --inspect flag | 1 action/call | script mode | 1 action/call |
 | Code | ~3K Rust | Playwright | 76K (69K fork) | ~12K TS |
 
 ## License
