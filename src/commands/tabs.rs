@@ -27,8 +27,9 @@ pub async fn run(client: &CdpClient) -> Result<String, Box<dyn std::error::Error
     output.push('\n');
 
     for page in &pages {
-        let url_display = if page.url.len() > 50 {
-            format!("{}...", &page.url[..47])
+        let url_display = if page.url.chars().count() > 50 {
+            let truncated: String = page.url.chars().take(47).collect();
+            format!("{truncated}...")
         } else {
             page.url.clone()
         };

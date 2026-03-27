@@ -30,10 +30,15 @@ pub async fn run(
 
     let file_name = match filename {
         Some(name) => {
-            if name.ends_with(".png") {
-                name.to_string()
+            // Sanitize: extract only the filename component, strip path traversal
+            let sanitized = std::path::Path::new(name)
+                .file_name()
+                .and_then(|n| n.to_str())
+                .unwrap_or("screenshot");
+            if sanitized.ends_with(".png") {
+                sanitized.to_string()
             } else {
-                format!("{name}.png")
+                format!("{sanitized}.png")
             }
         }
         None => {
@@ -47,6 +52,13 @@ pub async fn run(
 
     let path = dir.join(&file_name);
     std::fs::write(&path, &bytes)?;
+
+    // Restrict permissions (readable only by owner)
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let _ = std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o600));
+    }
 
     Ok(path.display().to_string())
 }

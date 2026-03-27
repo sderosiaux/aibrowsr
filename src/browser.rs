@@ -41,7 +41,7 @@ pub async fn get_page_ws_url(
     // Retry a few times — Chrome may not be fully ready yet
     let mut last_err = BrowserError::NotFound("No attempts made".into());
     for _ in 0..5 {
-        match reqwest_get_json(&url, Duration::from_millis(2000)).await {
+        match http_get_json(&url, Duration::from_millis(2000)).await {
             Ok(list) => {
                 if let Some(pages) = list.as_array() {
                     for page in pages {
@@ -68,8 +68,22 @@ pub async fn get_page_ws_url(
     Err(last_err)
 }
 
+/// Validate a browser profile name. Prevents path traversal via `--browser "../../etc"`.
+pub fn validate_browser_name(name: &str) -> Result<(), BrowserError> {
+    if name.is_empty() {
+        return Err(BrowserError::Launch("Browser name cannot be empty".into()));
+    }
+    if !name.chars().all(|c| c.is_alphanumeric() || c == '-' || c == '_') {
+        return Err(BrowserError::Launch(
+            "Browser name must contain only alphanumeric characters, hyphens, and underscores".into(),
+        ));
+    }
+    Ok(())
+}
+
 /// Resolve a browser connection: either connect to an existing Chrome or launch one.
 pub async fn resolve_browser(opts: &BrowserOptions) -> Result<BrowserConnection, BrowserError> {
+    validate_browser_name(&opts.name)?;
     if let Some(endpoint) = &opts.connect {
         if endpoint == "auto" {
             return auto_discover().await;
@@ -207,7 +221,7 @@ async fn fetch_ws_endpoint(base_url: &str) -> Result<String, BrowserError> {
         base_url.trim_end_matches('/')
     );
 
-    let response = reqwest_get_json(&url, Duration::from_millis(2000)).await?;
+    let response = http_get_json(&url, Duration::from_millis(2000)).await?;
 
     let ws_url = response
         .get("webSocketDebuggerUrl")
@@ -217,27 +231,35 @@ async fn fetch_ws_endpoint(base_url: &str) -> Result<String, BrowserError> {
     Ok(ws_url.to_string())
 }
 
-/// HTTP GET that returns JSON. Uses curl for reliability across all Chrome versions.
-async fn reqwest_get_json(
+/// HTTP GET that returns JSON. Uses ureq (blocking, run on tokio spawn_blocking).
+async fn http_get_json(
     url: &str,
     timeout: Duration,
 ) -> Result<serde_json::Value, BrowserError> {
-    let timeout_secs = timeout.as_secs().max(1);
+    let url = url.to_string();
+    let result = tokio::task::spawn_blocking(move || {
+        let agent = ureq::Agent::config_builder()
+            .timeout_connect(Some(timeout))
+            .timeout_recv_body(Some(timeout))
+            .build()
+            .new_agent();
 
-    let output = tokio::process::Command::new("curl")
-        .args(["-sS", "--max-time", &timeout_secs.to_string(), url])
-        .output()
-        .await
-        .map_err(|e| BrowserError::NotFound(format!("curl failed: {e}")))?;
+        let body = agent
+            .get(&url)
+            .header("Accept", "application/json")
+            .call()
+            .map_err(|e| BrowserError::NotFound(format!("HTTP request failed: {e}")))?
+            .body_mut()
+            .read_to_string()
+            .map_err(|e| BrowserError::NotFound(format!("Failed to read body: {e}")))?;
 
-    if !output.status.success() {
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        return Err(BrowserError::NotFound(format!("curl error: {stderr}")));
-    }
+        serde_json::from_str(&body)
+            .map_err(|e| BrowserError::NotFound(format!("Invalid JSON: {e}")))
+    })
+    .await
+    .map_err(|e| BrowserError::NotFound(format!("Task failed: {e}")))?;
 
-    let body = String::from_utf8_lossy(&output.stdout);
-    serde_json::from_str(&body)
-        .map_err(|e| BrowserError::NotFound(format!("Invalid JSON from {url}: {e}")))
+    result
 }
 
 /// Check if a WebSocket endpoint is reachable.

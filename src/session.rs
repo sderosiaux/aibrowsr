@@ -57,6 +57,11 @@ pub fn save_session(store: &SessionStore) -> Result<(), SessionError> {
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent)
             .map_err(|e| SessionError(format!("Failed to create dir: {e}")))?;
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let _ = std::fs::set_permissions(parent, std::fs::Permissions::from_mode(0o700));
+        }
     }
 
     let json = serde_json::to_string_pretty(store)
@@ -68,6 +73,14 @@ pub fn save_session(store: &SessionStore) -> Result<(), SessionError> {
         .map_err(|e| SessionError(format!("Failed to write {}: {e}", tmp_path.display())))?;
     std::fs::rename(&tmp_path, &path)
         .map_err(|e| SessionError(format!("Failed to rename session file: {e}")))?;
+
+    // Restrict permissions: session file contains WebSocket URLs that grant
+    // full browser control. Only the owning user should read it.
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let _ = std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o600));
+    }
 
     Ok(())
 }

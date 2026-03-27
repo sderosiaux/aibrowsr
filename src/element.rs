@@ -3,7 +3,7 @@ use std::time::Duration;
 
 use serde_json::json;
 
-use crate::cdp::client::{CdpClient, CdpClientError};
+use crate::cdp::client::CdpClient;
 use crate::cdp::types::{
     BoxModel, DispatchMouseEventParams, GetBoxModelResult, MouseButton, MouseEventType,
     RemoteObject, ResolveNodeParams, ResolveNodeResult,
@@ -293,17 +293,24 @@ pub async fn hover(
     Ok(())
 }
 
-/// Wait briefly for the page to stabilize after an action.
-/// Checks for navigation events (Page.frameNavigated, Page.loadEventFired).
+/// Wait for the page to stabilize after an action.
+///
+/// Uses a short probe (50ms) to detect if navigation started.
+/// Only waits for full page load if navigation was actually triggered.
+/// Non-navigating actions (menu click, toggle, dropdown) return instantly.
 async fn wait_for_stabilization(client: &CdpClient) {
-    // Wait up to 500ms for a navigation event. If none comes, proceed.
-    let _ = client
-        .wait_for_event("Page.frameNavigated", Duration::from_millis(500))
+    // Short probe: did this action trigger a navigation?
+    let nav = client
+        .wait_for_event("Page.frameNavigated", Duration::from_millis(50))
         .await;
-    // If navigation started, wait for load
-    let _ = client
-        .wait_for_event("Page.loadEventFired", Duration::from_secs(5))
-        .await;
+
+    if nav.is_ok() {
+        // Navigation detected — wait for load to complete (up to 10s)
+        let _ = client
+            .wait_for_event("Page.loadEventFired", Duration::from_secs(10))
+            .await;
+    }
+    // No navigation detected — return immediately, no 500ms penalty
 }
 
 #[derive(Debug)]

@@ -12,6 +12,7 @@ tokio-tungstenite = "0.24"
 futures-util = "0.3"
 dirs = "5"
 libc = "0.2"
+ureq = { version = "3", features = ["json"] }
 
 [lints.rust]
 unsafe_code = "deny"

@@ -31,6 +31,7 @@ pub enum CdpClientError {
     Serialization(serde_json::Error),
     Protocol { code: i64, message: String },
     ResponseParse(serde_json::Error),
+    Timeout(String),
     DispatcherGone,
 }
 
@@ -41,6 +42,7 @@ impl std::fmt::Display for CdpClientError {
             Self::Serialization(e) => write!(f, "serialization: {e}"),
             Self::Protocol { code, message } => write!(f, "CDP error {code}: {message}"),
             Self::ResponseParse(e) => write!(f, "response parse: {e}"),
+            Self::Timeout(msg) => write!(f, "timeout: {msg}"),
             Self::DispatcherGone => write!(f, "dispatcher task exited"),
         }
     }
@@ -152,7 +154,11 @@ impl CdpClient {
                 match rx.recv().await {
                     Ok(event) if event.method == method => return Ok(event),
                     Ok(_) => continue,
-                    Err(_) => return Err(CdpClientError::DispatcherGone),
+                    // Lagged: we missed some events, keep trying
+                    Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => continue,
+                    Err(tokio::sync::broadcast::error::RecvError::Closed) => {
+                        return Err(CdpClientError::DispatcherGone)
+                    }
                 }
             }
         })
@@ -160,10 +166,9 @@ impl CdpClient {
 
         match result {
             Ok(inner) => inner,
-            Err(_) => Err(CdpClientError::Protocol {
-                code: -1,
-                message: format!("Timeout waiting for event {method}"),
-            }),
+            Err(_) => Err(CdpClientError::Timeout(format!(
+                "Timeout waiting for event {method}"
+            ))),
         }
     }
 

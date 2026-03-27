@@ -154,6 +154,28 @@ enum DaemonAction {
 
 #[tokio::main]
 async fn main() {
+    // Install signal handler so managed Chrome is cleaned up on Ctrl+C
+    tokio::spawn(async {
+        if let Ok(()) = tokio::signal::ctrl_c().await {
+            // Best-effort: kill all managed Chrome processes from session
+            if let Ok(store) = session::load_session() {
+                for browser in store.browsers.values() {
+                    if let Some(pid) = browser.pid {
+                        #[cfg(unix)]
+                        {
+                            let _ = std::process::Command::new("kill")
+                                .arg(pid.to_string())
+                                .stdout(std::process::Stdio::null())
+                                .stderr(std::process::Stdio::null())
+                                .status();
+                        }
+                    }
+                }
+            }
+            std::process::exit(130); // 128 + SIGINT
+        }
+    });
+
     let cli = Cli::parse();
 
     if let Err(e) = run(cli).await {
@@ -192,20 +214,19 @@ async fn run(cli: Cli) -> Result<(), Box<dyn std::error::Error>> {
     // All other commands need a browser connection + CDP client
     let mut store = session::load_session()?;
 
-    // Try to reuse existing session (connectivity check replaces stale PID cleanup) before launching a new browser
-    let conn = if let Some(existing) = store.browsers.get(&cli.browser) {
-        // Try connecting to the stored endpoint
+    // Try to reuse existing session, or launch a new browser
+    let (conn, browser_client) = if let Some(existing) = store.browsers.get(&cli.browser) {
         let ws = &existing.ws_endpoint;
         let http = browser::extract_http_from_ws(ws);
         match CdpClient::connect(ws).await {
-            Ok(_client) => {
-                // Existing browser is alive — reuse it
-                drop(_client);
-                browser::BrowserConnection {
+            Ok(client) => {
+                // Reuse existing browser — keep this connection as browser_client
+                let conn = browser::BrowserConnection {
                     ws_endpoint: ws.clone(),
                     http_endpoint: Some(http),
                     pid: existing.pid,
-                }
+                };
+                (conn, client)
             }
             Err(_) => {
                 // Dead — clean up and launch fresh
@@ -216,7 +237,9 @@ async fn run(cli: Cli) -> Result<(), Box<dyn std::error::Error>> {
                     ignore_https_errors: cli.ignore_https_errors,
                     connect: cli.connect.clone(),
                 };
-                browser::resolve_browser(&opts).await?
+                let conn = browser::resolve_browser(&opts).await?;
+                let client = CdpClient::connect(&conn.ws_endpoint).await?;
+                (conn, client)
             }
         }
     } else {
@@ -226,27 +249,28 @@ async fn run(cli: Cli) -> Result<(), Box<dyn std::error::Error>> {
             ignore_https_errors: cli.ignore_https_errors,
             connect: cli.connect.clone(),
         };
-        browser::resolve_browser(&opts).await?
+        let conn = browser::resolve_browser(&opts).await?;
+        let client = CdpClient::connect(&conn.ws_endpoint).await?;
+        (conn, client)
     };
 
     let http_endpoint = conn.http_endpoint.as_deref().ok_or_else(|| {
         "No HTTP endpoint available. Cannot resolve page WebSocket URL."
     })?;
 
-    // Connect browser-level CDP for Target operations
-    let browser_client = CdpClient::connect(&conn.ws_endpoint).await?;
-
-    // Ensure browser session
-    let browser_session = session::ensure_browser(
-        &mut store,
-        &cli.browser,
-        &conn.ws_endpoint,
-        conn.pid,
-        cli.headless,
-    );
-
-    // Resolve page target — use first existing page or create one
-    let target_id = resolve_page_target(&browser_client, browser_session).await?;
+    // Ensure browser session and resolve page target
+    let target_id = {
+        let browser_session = session::ensure_browser(
+            &mut store,
+            &cli.browser,
+            &conn.ws_endpoint,
+            conn.pid,
+            cli.headless,
+        );
+        resolve_page_target(&browser_client, browser_session).await?
+    };
+    // Save session immediately so Chrome PID is persisted even if CLI crashes later
+    let _ = session::save_session(&store);
 
     // Connect page-level CDP (for Page.*, Runtime.*, DOM.*, etc.)
     let page_ws = browser::get_page_ws_url(http_endpoint, &target_id).await?;
@@ -257,7 +281,7 @@ async fn run(cli: Cli) -> Result<(), Box<dyn std::error::Error>> {
     // Execute command
     match cli.command {
         Command::Goto { url, snap } => {
-            let result = commands::goto::run(&client, &url).await?;
+            let result = commands::goto::run(&client, &url, cli.timeout).await?;
             println!("{} — {}", result.url, result.title);
 
             // Update session

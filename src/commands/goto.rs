@@ -10,7 +10,7 @@ pub struct GotoResult {
     pub title: String,
 }
 
-pub async fn run(client: &CdpClient, url: &str) -> Result<GotoResult, Box<dyn std::error::Error>> {
+pub async fn run(client: &CdpClient, url: &str, timeout_secs: u64) -> Result<GotoResult, Box<dyn std::error::Error>> {
     // Ensure Page domain is enabled so we receive loadEventFired
     client.enable("Page").await?;
 
@@ -30,9 +30,9 @@ pub async fn run(client: &CdpClient, url: &str) -> Result<GotoResult, Box<dyn st
         return Err(format!("Navigation failed: {error_text}").into());
     }
 
-    // Wait for Page.loadEventFired with 5s timeout
+    // Wait for Page.loadEventFired
     let _ = client
-        .wait_for_event("Page.loadEventFired", Duration::from_secs(5))
+        .wait_for_event("Page.loadEventFired", Duration::from_secs(timeout_secs))
         .await;
 
     // Get page title via Runtime.evaluate
