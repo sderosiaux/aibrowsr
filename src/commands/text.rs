@@ -14,10 +14,11 @@ pub async fn run(
     uid_map: &HashMap<String, ElementRef>,
 ) -> Result<String, Box<dyn std::error::Error>> {
     let raw = if let Some(sel) = selector {
-        // Selector-based extraction
+        // Selector-based extraction with role-attribute fallback
+        // "main" also matches [role=main], "nav" also matches [role=navigation], etc.
         let escaped = sel.replace('\\', "\\\\").replace('\'', "\\'");
         let expr = format!(
-            "(() => {{ const el = document.querySelector('{escaped}'); return el ? el.innerText || '' : ''; }})()"
+            "(() => {{ let el = document.querySelector('{escaped}'); if (!el) {{ el = document.querySelector('[role={escaped}]'); }} return el ? el.innerText || '' : ''; }})()"
         );
         let result: EvaluateResult = client
             .call(
