@@ -449,7 +449,13 @@ async fn run(cli: Cli) -> Result<(), Box<dyn std::error::Error>> {
     let page_ws = browser::get_page_ws_url(http_endpoint, &target_id).await?;
     let client = CdpClient::connect(&page_ws).await?;
     client.enable("Page").await?;
-    client.enable("Runtime").await?;
+    // Runtime.enable intentionally NOT called in stealth mode — it's the #1 detection vector.
+    // Runtime.evaluate still works without Runtime.enable (it's a separate CDP method).
+    // What we lose: Runtime events (executionContextCreated, bindingCalled, consoleAPICalled).
+    // What we keep: Runtime.evaluate, Runtime.callFunctionOn, Runtime.addBinding.
+    if !cli.stealth {
+        client.enable("Runtime").await?;
+    }
 
     // Stealth mode: hide automation fingerprints from bot detectors
     // Based on puppeteer-extra-plugin-stealth techniques (CDP-level patches)
