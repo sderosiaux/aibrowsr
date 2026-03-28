@@ -1,0 +1,2 @@
+{"type":"config","name":"bug-hunt","metricName":"bugs_fixed","metricUnit":"count","bestDirection":"higher"}
+{"n":1,"commit":"95bd642","metric":0,"status":"keep","description":"baseline: 30 existing tests, 0 bug-specific tests","metrics":{},"timestamp":1774702603}
