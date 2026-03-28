@@ -460,8 +460,7 @@ pub enum BrowserError {
 impl std::fmt::Display for BrowserError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::Launch(msg) => write!(f, "{msg}"),
-            Self::NotFound(msg) => write!(f, "{msg}"),
+            Self::Launch(msg) | Self::NotFound(msg) => write!(f, "{msg}"),
         }
     }
 }

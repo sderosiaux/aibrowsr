@@ -253,8 +253,8 @@ async fn main() {
     let json_mode = cli.json;
 
     if let Err(e) = run(cli).await {
+        let msg = e.to_string();
         if json_mode {
-            let msg = e.to_string();
             let hint = error_hint(&msg);
             let mut obj = json!({"ok": false, "error": msg});
             if let Some(h) = hint {
@@ -262,7 +262,6 @@ async fn main() {
             }
             println!("{}", serde_json::to_string(&obj).unwrap_or_default());
         } else {
-            let msg = e.to_string();
             eprintln!("error: {msg}");
             if let Some(hint) = error_hint(&msg) {
                 eprintln!("hint: {hint}");

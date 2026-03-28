@@ -42,9 +42,8 @@ pub async fn run_daemon(socket_path: &Path) -> Result<(), DaemonError> {
         loop {
             interval.tick().await;
             // Heartbeat logic: try to load session and verify browser PIDs
-            let mut store = match session::load_session() {
-                Ok(s) => s,
-                Err(_) => continue,
+            let Ok(mut store) = session::load_session() else {
+                continue;
             };
             let before = store.browsers.len();
             session::cleanup_stale(&mut store);

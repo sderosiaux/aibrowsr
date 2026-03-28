@@ -153,9 +153,8 @@ impl CdpClient {
             loop {
                 match rx.recv().await {
                     Ok(event) if event.method == method => return Ok(event),
-                    Ok(_) => continue,
-                    // Lagged: we missed some events, keep trying
-                    Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => continue,
+                    Ok(_)
+                    | Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => continue,
                     Err(tokio::sync::broadcast::error::RecvError::Closed) => {
                         return Err(CdpClientError::DispatcherGone)
                     }
@@ -211,9 +210,8 @@ async fn dispatch_loop(
     events_tx: broadcast::Sender<CdpEvent>,
 ) {
     loop {
-        let message = match receiver.recv().await {
-            Ok(Some(text)) => text,
-            Ok(None) | Err(_) => break,
+        let Ok(Some(message)) = receiver.recv().await else {
+            break;
         };
 
         let parsed: CdpMessage = match serde_json::from_str(&message) {
