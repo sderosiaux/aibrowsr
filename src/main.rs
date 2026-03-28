@@ -5,8 +5,10 @@ mod commands;
 mod daemon;
 mod element;
 mod element_ref;
+mod pipe;
 mod run_helpers;
 mod session;
+mod setup;
 mod snapshot;
 
 use clap::{Parser, Subcommand};
@@ -39,45 +41,45 @@ const CLI_AFTER_LONG_HELP: &str = include_str!("../llm-guide.txt");
     after_long_help = CLI_AFTER_LONG_HELP,
 )]
 #[allow(clippy::struct_excessive_bools)]
-struct Cli {
+pub(crate) struct Cli {
     /// Named browser profile (default: "default")
     #[arg(long, default_value = "default")]
-    browser: String,
+    pub(crate) browser: String,
 
     /// Connect to existing browser: ws:// URL, http:// URL, or "auto"
     #[arg(long)]
-    connect: Option<String>,
+    pub(crate) connect: Option<String>,
 
     /// Launch browser with a visible window (default is headless)
     #[arg(long)]
-    headed: bool,
+    pub(crate) headed: bool,
 
     /// Global timeout in seconds for page loads
     #[arg(long, default_value = "30")]
-    timeout: u64,
+    pub(crate) timeout: u64,
 
     /// Ignore HTTPS certificate errors
     #[arg(long)]
-    ignore_https_errors: bool,
+    pub(crate) ignore_https_errors: bool,
 
     /// Output structured JSON instead of text
     #[arg(long)]
-    json: bool,
+    pub(crate) json: bool,
 
     /// Stealth mode: 7 anti-detection patches (webdriver, UA, WebGL, input leak, Runtime.enable skipped)
     #[arg(long)]
-    stealth: bool,
+    pub(crate) stealth: bool,
 
     /// Max depth for --inspect output (used by goto, click, fill, etc.)
     #[arg(long)]
-    max_depth: Option<usize>,
+    pub(crate) max_depth: Option<usize>,
 
     /// Named page/tab within the browser (default: "default")
     #[arg(long, default_value = "default")]
-    page: String,
+    pub(crate) page: String,
 
     #[command(subcommand)]
-    command: Command,
+    pub(crate) command: Command,
 }
 
 #[derive(Subcommand)]
@@ -241,6 +243,38 @@ enum Command {
         uid: String,
     },
 
+    /// Capture network requests (API responses, XHR, fetch)
+    Network {
+        /// URL pattern to filter (case-insensitive contains match)
+        #[arg(long)]
+        filter: Option<String>,
+        /// Include response bodies (JSON/text only, truncated to 2000 chars)
+        #[arg(long)]
+        body: bool,
+        /// Capture live traffic for N seconds (default: show already-loaded resources via Performance API)
+        #[arg(long)]
+        live: Option<u64>,
+        /// Max entries to show
+        #[arg(long, default_value = "50")]
+        limit: usize,
+    },
+
+    /// Show captured console messages and JS errors
+    Console {
+        /// Filter by level: log, warn, error, info, exception
+        #[arg(long)]
+        level: Option<String>,
+        /// Clear captured messages after reading
+        #[arg(long)]
+        clear: bool,
+        /// Max entries to show
+        #[arg(long, default_value = "50")]
+        limit: usize,
+    },
+
+    /// Persistent connection mode — read JSON commands from stdin (one per line)
+    Pipe,
+
     /// List open browser tabs
     Tabs,
 
@@ -354,6 +388,10 @@ async fn run(cli: Cli) -> Result<(), Box<dyn std::error::Error>> {
             return cmd_close(&cli.browser, purge, cli.json);
         }
 
+        Command::Pipe => {
+            return pipe::run_pipe(&cli).await;
+        }
+
         _ => {}
     }
 
@@ -449,6 +487,11 @@ async fn run(cli: Cli) -> Result<(), Box<dyn std::error::Error>> {
     let page_ws = browser::get_page_ws_url(http_endpoint, &target_id).await?;
     let client = CdpClient::connect(&page_ws).await?;
     client.enable("Page").await?;
+
+    // Inject console interceptor (stealth-safe, no Runtime.enable needed).
+    // Survives navigations via addScriptToEvaluateOnNewDocument + bootstraps current page.
+    commands::console::inject(&client).await;
+
     // Runtime.enable intentionally NOT called in stealth mode — it's the #1 detection vector.
     // Runtime.evaluate still works without Runtime.enable (it's a separate CDP method).
     // What we lose: Runtime events (executionContextCreated, bindingCalled, consoleAPICalled).
@@ -458,75 +501,8 @@ async fn run(cli: Cli) -> Result<(), Box<dyn std::error::Error>> {
     }
 
     // Stealth mode: hide automation fingerprints from bot detectors
-    // Based on puppeteer-extra-plugin-stealth techniques (CDP-level patches)
     if cli.stealth {
-        let _ = client.enable("Network").await;
-
-        // 1. navigator.webdriver = undefined (the #1 detection vector)
-        // Must be injected before ANY page JS runs, survives navigations
-        let _ = client
-            .send(
-                "Page.addScriptToEvaluateOnNewDocument",
-                json!({
-                    "source": r#"
-                        Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
-                        // Mask chrome.runtime (headless doesn't have it)
-                        if (!window.chrome) window.chrome = {};
-                        if (!window.chrome.runtime) window.chrome.runtime = { connect: () => {}, sendMessage: () => {} };
-                        // Mask Permissions API inconsistency (headless returns "prompt" for notifications)
-                        const origQuery = window.Permissions && Permissions.prototype.query;
-                        if (origQuery) {
-                            Permissions.prototype.query = (params) => (
-                                params.name === 'notifications'
-                                    ? Promise.resolve({ state: Notification.permission })
-                                    : origQuery.call(Permissions.prototype, params)
-                            );
-                        }
-                        // Mask webGL vendor/renderer (headless gives "Google Inc." / "ANGLE")
-                        const getParam = WebGLRenderingContext.prototype.getParameter;
-                        WebGLRenderingContext.prototype.getParameter = function(param) {
-                            if (param === 37445) return 'Intel Inc.';
-                            if (param === 37446) return 'Intel Iris OpenGL Engine';
-                            return getParam.call(this, param);
-                        };
-                        // Fix CDP input leak: screenX/screenY == pageX/pageY reveals automation.
-                        // Add a random window offset so screen coords != page coords.
-                        // (CDP-Patches technique from github.com/Kaliiiiiiiiii-Vinyzu/CDP-Patches)
-                        const __screenOffset = { x: Math.floor(Math.random() * 100) + 50, y: Math.floor(Math.random() * 100) + 80 };
-                        const origMouseEvent = MouseEvent;
-                        window.MouseEvent = class extends origMouseEvent {
-                            constructor(type, init = {}) {
-                                if (init.screenX !== undefined) init.screenX += __screenOffset.x;
-                                if (init.screenY !== undefined) init.screenY += __screenOffset.y;
-                                super(type, init);
-                            }
-                        };
-                    "#
-                }),
-            )
-            .await;
-
-        // 2. Also patch the current page immediately (in case we connected mid-session)
-        let _ = client
-            .send(
-                "Runtime.evaluate",
-                json!({
-                    "expression": "Object.defineProperty(navigator, 'webdriver', { get: () => undefined });"
-                }),
-            )
-            .await;
-
-        // 3. Override user-agent to remove "HeadlessChrome" (the #2 detection vector)
-        let _ = client
-            .send(
-                "Network.setUserAgentOverride",
-                json!({
-                    "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
-                    "acceptLanguage": "en-US,en;q=0.9",
-                    "platform": "MacIntel"
-                }),
-            )
-            .await;
+        setup::apply_stealth(&client).await;
     }
 
     // Execute command
@@ -827,6 +803,33 @@ async fn run(cli: Cli) -> Result<(), Box<dyn std::error::Error>> {
             }
         }
 
+        Command::Network { filter, body, live, limit } => {
+            let entries = if let Some(secs) = live {
+                if cli.stealth { eprintln!("warning: --live enables Network domain (detectable)"); }
+                commands::network::run_live(&client, filter.as_deref(), body, limit, secs).await?
+            } else {
+                commands::network::run_retroactive(&client, filter.as_deref(), limit).await?
+            };
+            if json_mode {
+                json_output(&json!({"ok": true, "requests": entries}));
+            } else {
+                println!("{}", commands::network::format_text(&entries));
+            }
+        }
+
+        Command::Console { level, clear, limit } => {
+            let entries = commands::console::run(&client, level.as_deref(), clear, limit).await?;
+            if json_mode {
+                let messages: Vec<serde_json::Value> = entries
+                    .iter()
+                    .map(|e| json!({"level": e.level, "message": e.message, "timestamp": e.timestamp}))
+                    .collect();
+                json_output(&json!({"ok": true, "messages": messages}));
+            } else {
+                println!("{}", commands::console::format_text(&entries));
+            }
+        }
+
         Command::Tabs => {
             if json_mode {
                 let tabs = commands::tabs::run_structured(&browser_client).await?;
@@ -838,7 +841,7 @@ async fn run(cli: Cli) -> Result<(), Box<dyn std::error::Error>> {
         }
 
         // Already handled above
-        Command::Daemon { .. } | Command::Status | Command::Stop | Command::Close { .. } => {
+        Command::Daemon { .. } | Command::Status | Command::Stop | Command::Close { .. } | Command::Pipe => {
             unreachable!()
         }
     }
