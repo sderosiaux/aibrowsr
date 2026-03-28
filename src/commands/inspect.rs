@@ -54,12 +54,25 @@ pub async fn scroll_collect(
             stale_count = 0;
         }
 
-        // Scroll down one viewport
+        // Scroll down one viewport, then wait for DOM mutations to settle
         let _ = client.call::<_, serde_json::Value>(
             "Runtime.evaluate",
-            json!({"expression": "window.scrollBy(0, window.innerHeight)", "returnByValue": true}),
+            json!({
+                "expression": r"(async () => {
+                    window.scrollBy(0, window.innerHeight);
+                    await new Promise(resolve => {
+                        let timer = setTimeout(resolve, 2000);
+                        const obs = new MutationObserver(() => {
+                            clearTimeout(timer);
+                            timer = setTimeout(() => { obs.disconnect(); resolve(); }, 400);
+                        });
+                        obs.observe(document.body || document.documentElement, { childList: true, subtree: true });
+                    });
+                })()",
+                "awaitPromise": true,
+                "returnByValue": true,
+            }),
         ).await;
-        tokio::time::sleep(std::time::Duration::from_millis(800)).await;
     }
 
     collected.truncate(limit);
