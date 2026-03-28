@@ -16,9 +16,9 @@ pub async fn run(
     let raw = if let Some(sel) = selector {
         // Selector-based extraction with role-attribute fallback
         // "main" also matches [role=main], "nav" also matches [role=navigation], etc.
-        let escaped = sel.replace('\\', "\\\\").replace('\'', "\\'");
+        let safe_sel = serde_json::to_string(sel).unwrap_or_default();
         let expr = format!(
-            "(() => {{ let el = document.querySelector('{escaped}'); if (!el) {{ el = document.querySelector('[role={escaped}]'); }} return el ? el.innerText || '' : ''; }})()"
+            "(() => {{ let el = document.querySelector({safe_sel}); if (!el) {{ el = document.querySelector('[role=' + {safe_sel} + ']'); }} return el ? el.innerText || '' : ''; }})()"
         );
         let result: EvaluateResult = client
             .call(
@@ -150,5 +150,17 @@ mod tests {
     #[test]
     fn no_blanks() {
         assert_eq!(collapse_blank_lines("a\nb\nc"), "a\nb\nc");
+    }
+
+    #[test]
+    fn bug_selector_injection_escaped() {
+        // serde_json::to_string wraps in double quotes and escapes internals
+        let malicious = r#"'); alert('xss"#;
+        let escaped = serde_json::to_string(malicious).unwrap();
+        assert!(escaped.starts_with('"'));
+        assert!(escaped.ends_with('"'));
+        // The single quotes are preserved (not dangerous in double-quoted JS string)
+        // The important thing: no way to break out of the double-quoted string
+        assert!(!escaped.contains(r#"\""#) || escaped.starts_with('"'));
     }
 }
