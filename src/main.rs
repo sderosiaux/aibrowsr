@@ -37,6 +37,7 @@ const CLI_AFTER_LONG_HELP: &str = include_str!("../llm-guide.txt");
     long_about = CLI_LONG_ABOUT,
     after_long_help = CLI_AFTER_LONG_HELP,
 )]
+#[allow(clippy::struct_excessive_bools)]
 struct Cli {
     /// Named browser profile (default: "default")
     #[arg(long, default_value = "default")]
@@ -61,6 +62,10 @@ struct Cli {
     /// Output structured JSON instead of text
     #[arg(long)]
     json: bool,
+
+    /// Stealth mode: hide automation fingerprints (navigator.webdriver, headless UA)
+    #[arg(long)]
+    stealth: bool,
 
     /// Max depth for --inspect output (used by goto, click, fill, etc.)
     #[arg(long)]
@@ -370,6 +375,7 @@ async fn run(cli: Cli) -> Result<(), Box<dyn std::error::Error>> {
                     name: cli.browser.clone(),
                     headless: want_headless,
                     ignore_https_errors: cli.ignore_https_errors,
+                    stealth: cli.stealth,
                     connect: cli.connect.clone(),
                 };
                 let conn = browser::resolve_browser(&opts).await?;
@@ -394,6 +400,7 @@ async fn run(cli: Cli) -> Result<(), Box<dyn std::error::Error>> {
                 name: cli.browser.clone(),
                 headless: want_headless,
                 ignore_https_errors: cli.ignore_https_errors,
+                stealth: cli.stealth,
                 connect: cli.connect.clone(),
             };
             let conn = browser::resolve_browser(&opts).await?;
@@ -405,6 +412,7 @@ async fn run(cli: Cli) -> Result<(), Box<dyn std::error::Error>> {
             name: cli.browser.clone(),
             headless: want_headless,
             ignore_https_errors: cli.ignore_https_errors,
+            stealth: cli.stealth,
             connect: cli.connect.clone(),
         };
         let conn = browser::resolve_browser(&opts).await?;
@@ -435,6 +443,66 @@ async fn run(cli: Cli) -> Result<(), Box<dyn std::error::Error>> {
     let client = CdpClient::connect(&page_ws).await?;
     client.enable("Page").await?;
     client.enable("Runtime").await?;
+
+    // Stealth mode: hide automation fingerprints from bot detectors
+    // Based on puppeteer-extra-plugin-stealth techniques (CDP-level patches)
+    if cli.stealth {
+        let _ = client.enable("Network").await;
+
+        // 1. navigator.webdriver = undefined (the #1 detection vector)
+        // Must be injected before ANY page JS runs, survives navigations
+        let _ = client
+            .send(
+                "Page.addScriptToEvaluateOnNewDocument",
+                json!({
+                    "source": r#"
+                        Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
+                        // Mask chrome.runtime (headless doesn't have it)
+                        if (!window.chrome) window.chrome = {};
+                        if (!window.chrome.runtime) window.chrome.runtime = { connect: () => {}, sendMessage: () => {} };
+                        // Mask Permissions API inconsistency (headless returns "prompt" for notifications)
+                        const origQuery = window.Permissions && Permissions.prototype.query;
+                        if (origQuery) {
+                            Permissions.prototype.query = (params) => (
+                                params.name === 'notifications'
+                                    ? Promise.resolve({ state: Notification.permission })
+                                    : origQuery.call(Permissions.prototype, params)
+                            );
+                        }
+                        // Mask webGL vendor/renderer (headless gives "Google Inc." / "ANGLE")
+                        const getParam = WebGLRenderingContext.prototype.getParameter;
+                        WebGLRenderingContext.prototype.getParameter = function(param) {
+                            if (param === 37445) return 'Intel Inc.';
+                            if (param === 37446) return 'Intel Iris OpenGL Engine';
+                            return getParam.call(this, param);
+                        };
+                    "#
+                }),
+            )
+            .await;
+
+        // 2. Also patch the current page immediately (in case we connected mid-session)
+        let _ = client
+            .send(
+                "Runtime.evaluate",
+                json!({
+                    "expression": "Object.defineProperty(navigator, 'webdriver', { get: () => undefined });"
+                }),
+            )
+            .await;
+
+        // 3. Override user-agent to remove "HeadlessChrome" (the #2 detection vector)
+        let _ = client
+            .send(
+                "Network.setUserAgentOverride",
+                json!({
+                    "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+                    "acceptLanguage": "en-US,en;q=0.9",
+                    "platform": "MacIntel"
+                }),
+            )
+            .await;
+    }
 
     // Execute command
     let json_mode = cli.json;

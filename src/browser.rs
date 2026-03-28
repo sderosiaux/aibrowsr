@@ -3,10 +3,12 @@ use std::process::{Command, Stdio};
 use std::time::{Duration, Instant};
 
 /// Options for launching or connecting to a browser.
+#[allow(clippy::struct_excessive_bools)]
 pub struct BrowserOptions {
     pub name: String,
     pub headless: bool,
     pub ignore_https_errors: bool,
+    pub stealth: bool,
     pub connect: Option<String>,
 }
 
@@ -16,6 +18,7 @@ impl Default for BrowserOptions {
             name: "default".into(),
             headless: false,
             ignore_https_errors: false,
+            stealth: false,
             connect: None,
         }
     }
@@ -127,6 +130,13 @@ async fn launch_browser(opts: &BrowserOptions) -> Result<BrowserConnection, Brow
 
     if opts.ignore_https_errors {
         cmd.arg("--ignore-certificate-errors");
+    }
+
+    if opts.stealth {
+        // Suppress the "Chrome is being controlled by automated test software" infobar
+        cmd.arg("--disable-infobars");
+        // Exclude automation-related Chrome switches from navigator.userAgent
+        cmd.arg("--disable-component-extensions-with-background-pages");
     }
 
     cmd.stdin(Stdio::null());
