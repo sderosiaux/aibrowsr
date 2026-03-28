@@ -837,8 +837,8 @@ async fn run(cli: Cli) -> Result<(), BoxError> {
                 crate::element::focus_selector(&client, sel).await?;
             }
             crate::element::type_text(&client, &text).await?;
-            let msg = if selector.is_some() {
-                format!("Typed {} chars into selector '{}'", text.len(), selector.as_ref().unwrap())
+            let msg = if let Some(sel) = &selector {
+                format!("Typed {} chars into selector '{sel}'", text.len())
             } else {
                 format!("Typed {} chars", text.len())
             };
