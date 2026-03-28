@@ -2,6 +2,13 @@
 name = "aibrowsr"
 version = "0.2.5"
 edition = "2024"
+description = "Browser automation for AI agents. Single binary, zero deps, CDP direct to Chrome."
+license = "MIT"
+repository = "https://github.com/sderosiaux/aibrowsr"
+keywords = ["browser", "automation", "chrome", "cdp", "ai-agent"]
+categories = ["command-line-utilities", "web-programming"]
+readme = "README.md"
+exclude = ["tests/js/node_modules/", "tests/fixtures/"]
 
 [dependencies]
 clap = { version = "4", features = ["derive"] }
