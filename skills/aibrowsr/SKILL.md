@@ -95,6 +95,7 @@ aibrowsr press Enter|Tab|Escape
 aibrowsr read [--truncate N]
 aibrowsr extract [--selector "css"] [--limit N]   # auto-detect repeating data (no selectors needed)
 aibrowsr extract --scroll                         # scroll first for lazy-loaded pages (YouTube, Pinterest)
+aibrowsr extract --a11y --scroll --limit 20       # React SPAs (X.com) -- uses a11y tree, not DOM
 aibrowsr text [--selector "main"] [--truncate N]
 aibrowsr eval "expression" [--selector "css"]
 

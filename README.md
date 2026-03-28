@@ -113,7 +113,7 @@ aibrowsr screenshot
 | `read [--html] [--truncate N]` | Article extraction via Mozilla Readability. |
 | `text [uid] [--selector "css"] [--truncate N]` | Visible text from page or element. |
 | `eval <expression> [--selector "css"]` | JS in page context. `el` = matched element. |
-| `extract [--selector "css"] [--limit N] [--scroll]` | Auto-detect repeating data. `--scroll` for lazy-loaded pages. |
+| `extract [--selector "css"] [--limit N] [--scroll] [--a11y]` | Auto-detect repeating data. `--a11y` for React SPAs (X.com). |
 | `network [--filter "pattern"] [--body] [--live N]` | Network requests and API responses. |
 | `console [--level error] [--clear]` | console.log/warn/error + JS exceptions. |
 | `pipe` | Persistent JSON stdin/stdout connection. |
@@ -172,6 +172,9 @@ aibrowsr read
 # Repeating data -- products, search results, feeds. No selectors.
 aibrowsr extract
 # Uses MDR/DEPTA heuristics. Finds the pattern automatically.
+
+# React SPAs (X.com, etc.) -- uses a11y tree instead of DOM
+aibrowsr extract --a11y --scroll --limit 20
 
 # Scoped visible text
 aibrowsr text --selector "[role=main]" --truncate 1000
