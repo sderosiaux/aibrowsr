@@ -302,7 +302,13 @@ pub fn cmd_close(browser_name: &str, purge: bool, json_mode: bool) -> Result<(),
         if let Some(home) = dirs::home_dir() {
             let profile_dir = home.join(".aibrowsr").join("browsers").join(browser_name);
             if profile_dir.exists() {
-                let _ = std::fs::remove_dir_all(&profile_dir);
+                // Wait briefly for Chrome to exit after kill, then retry purge
+                for _ in 0..5 {
+                    if std::fs::remove_dir_all(&profile_dir).is_ok() {
+                        break;
+                    }
+                    std::thread::sleep(std::time::Duration::from_millis(500));
+                }
             }
         }
     }
