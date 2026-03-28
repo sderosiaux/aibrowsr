@@ -1,6 +1,6 @@
 [package]
 name = "aibrowsr"
-version = "0.2.5"
+version = "0.3.0"
 edition = "2024"
 description = "Browser automation for AI agents. Single binary, zero deps, CDP direct to Chrome."
 license = "MIT"
