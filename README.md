@@ -14,11 +14,22 @@ Existing tools (Playwright, Puppeteer, Selenium) carry heavy runtimes and weren'
 
 ## Install
 
+### For AI agents (recommended)
+
 ```bash
-# npm (recommended — downloads prebuilt binary)
+# Install the skill — your agent learns aibrowsr automatically
+npx skills add sderosiaux/aibrowsr
+```
+
+This installs a `SKILL.md` that teaches your agent (Claude Code, Cursor, Copilot, etc.) how to use aibrowsr, including the workflow, commands, and best practices.
+
+### CLI binary
+
+```bash
+# npm (downloads prebuilt binary)
 npm install -g aibrowsr
 
-# or with npx (no install)
+# or with npx (no install needed)
 npx aibrowsr --help
 
 # or with Cargo (builds from source)
@@ -219,9 +230,19 @@ aibrowsr --page docs eval "document.title"   # → "Docs"
 
 ## Using with AI Agents
 
-Tell your agent to run `aibrowsr --help` — the help output includes a complete LLM usage guide. No plugin needed.
+### Skill (recommended)
 
-### Claude Code
+```bash
+npx skills add sderosiaux/aibrowsr
+```
+
+This installs a SKILL.md that teaches your agent the full aibrowsr workflow, commands, and tips. Works with Claude Code, Cursor, Copilot, and any agent that reads skill files.
+
+### Manual
+
+Tell your agent to run `aibrowsr --help` — the help output includes a complete LLM usage guide.
+
+### Claude Code permissions
 
 ```json
 {
