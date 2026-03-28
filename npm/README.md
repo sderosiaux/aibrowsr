@@ -270,7 +270,7 @@ google-chrome --remote-debugging-port=9222  # or launch manually
 | Element targeting | uid + CSS selector + coordinates | CSS selectors + snapshotForAI | uid (sequential) | CSS selectors |
 | UID stability | backendNodeId (stable across inspects) | N/A | sequential (reassigned each snapshot) | N/A |
 | Action + observe | `--inspect` flag (1 call) | 1 script (batched) | 1 MCP call per action | 1 MCP call per action |
-| Script batching | Tier 1 only (v2.1 planned) | Full JS scripts | No | No |
+| Script batching | No (atomic commands + eval) | Full JS scripts in QuickJS sandbox | No | No |
 | Stealth mode | 7 CDP patches + Runtime.enable skip | No | No | No |
 | Reader mode | `read` (Mozilla Readability) | No | No | No |
 | Sandbox | Chrome sandbox | QuickJS WASM sandbox | Chrome sandbox | No |
