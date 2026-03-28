@@ -848,10 +848,10 @@ async fn run(cli: Cli) -> Result<(), Box<dyn std::error::Error>> {
 
         Command::Tabs => {
             if json_mode {
-                let tabs = commands::tabs::run_structured(&browser_client).await?;
+                let tabs = commands::tabs::run_structured(&browser_client, &store).await?;
                 json_output(&json!({"ok": true, "tabs": tabs}));
             } else {
-                let output = commands::tabs::run(&browser_client).await?;
+                let output = commands::tabs::run(&browser_client, &store).await?;
                 print!("{output}");
             }
         }

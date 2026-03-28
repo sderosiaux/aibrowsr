@@ -1,8 +1,11 @@
+use std::collections::HashMap;
+
 use serde::Serialize;
 use serde_json::json;
 
 use crate::cdp::client::CdpClient;
 use crate::cdp::types::GetTargetsResult;
+use crate::session::SessionStore;
 
 /// Structured tab info for JSON output.
 #[derive(Debug, Serialize)]
@@ -10,31 +13,50 @@ pub struct TabInfo {
     pub id: String,
     pub url: String,
     pub title: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub page: Option<String>,
+}
+
+/// Build a `target_id` → `page_name` lookup from the session store.
+fn page_labels(store: &SessionStore) -> HashMap<String, String> {
+    let mut map = HashMap::new();
+    for browser in store.browsers.values() {
+        for (name, page) in &browser.pages {
+            map.insert(page.target_id.clone(), name.clone());
+        }
+    }
+    map
 }
 
 /// Return structured tab data.
-pub async fn run_structured(client: &CdpClient) -> Result<Vec<TabInfo>, Box<dyn std::error::Error>> {
+pub async fn run_structured(client: &CdpClient, store: &SessionStore) -> Result<Vec<TabInfo>, Box<dyn std::error::Error>> {
     let result: GetTargetsResult = client
         .call("Target.getTargets", json!({}))
         .await?;
+
+    let labels = page_labels(store);
 
     let tabs = result
         .target_infos
         .into_iter()
         .filter(|t| t.target_type == "page")
-        .map(|t| TabInfo {
-            id: t.target_id,
-            url: t.url,
-            title: t.title,
+        .map(|t| {
+            let page = labels.get(&t.target_id).cloned();
+            TabInfo {
+                id: t.target_id,
+                url: t.url,
+                title: t.title,
+                page,
+            }
         })
         .collect();
 
     Ok(tabs)
 }
 
-/// Return formatted text output (original behavior).
-pub async fn run(client: &CdpClient) -> Result<String, Box<dyn std::error::Error>> {
-    let tabs = run_structured(client).await?;
+/// Return formatted text output.
+pub async fn run(client: &CdpClient, store: &SessionStore) -> Result<String, Box<dyn std::error::Error>> {
+    let tabs = run_structured(client, store).await?;
 
     if tabs.is_empty() {
         return Ok("No open tabs.".into());
@@ -42,22 +64,18 @@ pub async fn run(client: &CdpClient) -> Result<String, Box<dyn std::error::Error
 
     let mut output = String::new();
     output.push_str(&format!(
-        "{:<36}  {:<50}  {}\n",
-        "TARGET_ID", "URL", "TITLE"
+        "{:<10}  {:<36}  {:<50}  {}\n",
+        "PAGE", "TARGET_ID", "URL", "TITLE"
     ));
-    output.push_str(&"-".repeat(120));
+    output.push_str(&"-".repeat(130));
     output.push('\n');
 
     for tab in &tabs {
-        let url_display = if tab.url.chars().count() > 50 {
-            let truncated: String = tab.url.chars().take(47).collect();
-            format!("{truncated}...")
-        } else {
-            tab.url.clone()
-        };
+        let page_label = tab.page.as_deref().unwrap_or("-");
+        let url_display = crate::truncate::truncate_str(&tab.url, 47, "...");
         output.push_str(&format!(
-            "{:<36}  {:<50}  {}\n",
-            tab.id, url_display, tab.title
+            "{:<10}  {:<36}  {:<50}  {}\n",
+            page_label, tab.id, url_display, tab.title
         ));
     }
 

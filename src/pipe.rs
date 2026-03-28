@@ -122,7 +122,7 @@ async fn dispatch(
         "press" => dispatch_press(client, cmd).await,
         "fill-form" | "fill_form" | "fillform" => dispatch_fill_form(client, store, browser_name, page_name, target_id, global_max_depth, cmd).await,
         "hover" => dispatch_hover(client, store, browser_name, page_name, cmd).await,
-        "tabs" => dispatch_tabs(browser_client).await,
+        "tabs" => dispatch_tabs(browser_client, store).await,
         "network" => dispatch_network(client, cmd).await,
         "console" => dispatch_console(client, cmd).await,
         "" => Err("Missing \"cmd\" field".into()),
@@ -330,11 +330,23 @@ async fn dispatch_wait(
     default_timeout: u64,
     cmd: &Value,
 ) -> Result<Value, Box<dyn std::error::Error>> {
-    let what = cmd.get("what").and_then(Value::as_str).ok_or("wait: missing \"what\"")?;
-    let pattern = cmd.get("pattern").and_then(Value::as_str).ok_or("wait: missing \"pattern\"")?;
+    // Accept both {"what":"text","pattern":"X"} and {"text":"X"} / {"url":"X"} / {"selector":"X"}
+    let (what, pattern) = if let Some(w) = cmd.get("what").and_then(Value::as_str) {
+        let p = cmd.get("pattern").and_then(Value::as_str)
+            .ok_or("wait: missing \"pattern\" (use {\"what\":\"text\",\"pattern\":\"...\"})")?;
+        (w.to_string(), p.to_string())
+    } else if let Some(p) = cmd.get("text").and_then(Value::as_str) {
+        ("text".into(), p.into())
+    } else if let Some(p) = cmd.get("url").and_then(Value::as_str) {
+        ("url".into(), p.into())
+    } else if let Some(p) = cmd.get("selector").and_then(Value::as_str) {
+        ("selector".into(), p.into())
+    } else {
+        return Err("wait: specify {\"what\":\"text\",\"pattern\":\"...\"} or {\"text\":\"...\"} or {\"url\":\"...\"} or {\"selector\":\"...\"}".into());
+    };
     let timeout = cmd.get("timeout").and_then(Value::as_u64).unwrap_or(default_timeout);
 
-    let msg = commands::wait::run(client, what, pattern, timeout).await?;
+    let msg = commands::wait::run(client, &what, &pattern, timeout).await?;
     Ok(json!({"ok": true, "message": msg}))
 }
 
@@ -460,8 +472,9 @@ async fn dispatch_press(
 
 async fn dispatch_tabs(
     browser_client: &CdpClient,
+    store: &session::SessionStore,
 ) -> Result<Value, Box<dyn std::error::Error>> {
-    let tabs = commands::tabs::run_structured(browser_client).await?;
+    let tabs = commands::tabs::run_structured(browser_client, store).await?;
     Ok(json!({"ok": true, "tabs": tabs}))
 }
 

@@ -138,17 +138,25 @@ fn format_ax_tree(
 
     // Post-filter by role if requested
     let output = if let Some(roles) = role_filter {
+        // Expand role aliases so agents don't need to know exact ARIA role names
+        let expanded: Vec<String> = roles.iter().flat_map(|&r| {
+            let mut v = vec![(*r).to_string()];
+            match r.to_lowercase().as_str() {
+                "textbox" => { v.push("searchbox".into()); v.push("combobox".into()); }
+                "input" => { v.push("textbox".into()); v.push("searchbox".into()); v.push("combobox".into()); }
+                "button" => { v.push("menuitem".into()); }
+                _ => {}
+            }
+            v
+        }).collect();
         output
             .lines()
             .filter(|line| {
-                // Keep lines where the role (word after uid=nN) matches the filter
-                // Format: "  uid=n47 button "Sign In" focused"
                 let trimmed = line.trim();
                 if let Some(after_uid) = trimmed.strip_prefix("uid=") {
-                    // Skip the uid part (e.g. "n47"), get the role
                     if let Some(rest) = after_uid.split_once(' ') {
                         let role = rest.1.split([' ', '"']).next().unwrap_or("");
-                        return roles.iter().any(|r| r.eq_ignore_ascii_case(role));
+                        return expanded.iter().any(|r| r.eq_ignore_ascii_case(role));
                     }
                 }
                 false
