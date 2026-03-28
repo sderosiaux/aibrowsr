@@ -115,17 +115,27 @@ async fn launch_browser(opts: &BrowserOptions) -> Result<BrowserConnection, Brow
     })?;
 
     // Prevent concurrent launches: if DevToolsActivePort already exists, wait for it
+    // Check for existing DevToolsActivePort — another process may have launched Chrome
     let port_file = profile_dir.join("DevToolsActivePort");
     if port_file.exists() {
-        if let Ok(ws) = wait_for_devtools_port(&port_file, Duration::from_secs(5)).await {
+        if let Some(ws) = read_devtools_active_port(&port_file) {
+            // Verify the WebSocket is actually reachable (not stale)
             let http = extract_http_endpoint(&ws);
-            return Ok(BrowserConnection {
-                ws_endpoint: ws,
-                http_endpoint: Some(http),
-                pid: None, // unknown — another process launched it
-            });
+            if http_get_json(
+                &format!("{http}/json/version"),
+                Duration::from_millis(1000),
+            )
+            .await
+            .is_ok()
+            {
+                return Ok(BrowserConnection {
+                    ws_endpoint: ws,
+                    http_endpoint: Some(http),
+                    pid: None,
+                });
+            }
         }
-        // Port file exists but stale — remove and launch fresh
+        // Port file exists but Chrome is dead — remove stale file and launch fresh
         let _ = std::fs::remove_file(&port_file);
     }
 

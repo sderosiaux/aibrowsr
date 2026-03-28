@@ -86,6 +86,7 @@ pub(crate) struct Cli {
 #[derive(Subcommand)]
 enum Command {
     /// Navigate to a URL
+    #[command(alias = "navigate", alias = "open", alias = "go")]
     Goto {
         /// Target URL
         url: String,
@@ -101,6 +102,7 @@ enum Command {
     },
 
     /// Click an element by uid, CSS selector, or coordinates
+    #[command(alias = "tap")]
     Click {
         /// Element uid (e.g. "n47") — omit if using --selector or --xy
         uid: Option<String>,
@@ -175,6 +177,7 @@ enum Command {
     Back,
 
     /// Take an accessibility tree inspection
+    #[command(alias = "snap", alias = "snapshot", alias = "tree")]
     Inspect {
         /// Include ignored/generic nodes
         #[arg(long)]
@@ -191,6 +194,7 @@ enum Command {
     },
 
     /// Capture a screenshot
+    #[command(alias = "capture")]
     Screenshot {
         /// Output filename (default: timestamped)
         #[arg(long)]
@@ -198,6 +202,7 @@ enum Command {
     },
 
     /// Evaluate JavaScript in the page
+    #[command(alias = "js", alias = "execute")]
     Eval {
         /// JS expression to evaluate (if --selector, `el` is the matched element)
         expression: String,
