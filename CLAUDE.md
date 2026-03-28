@@ -44,7 +44,8 @@ cargo clippy -- -D warnings  # zero warnings enforced in CI
 ## Key Design Decisions
 
 - **Headless by default** — `--headed` for debug. Mode mismatch auto-kills old browser.
-- **`--stealth` mode** — patches navigator.webdriver, chrome.runtime, WebGL, UA via CDP. Bypasses Cloudflare/Turnstile. No fake Chrome flags.
+- **`--stealth` mode** — 7 CDP patches: navigator.webdriver, chrome.runtime, WebGL, UA, Permissions, input screenX/pageX leak, Runtime.enable skipped. Bypasses Cloudflare/Turnstile.
+- **`--connect` for heavy protection** — DataDome/Kasada detect bundled Chromium fingerprints. Connect to real installed Chrome instead (`--connect http://127.0.0.1:9222`).
 - **Stable UIDs** — `n{backendNodeId}` instead of sequential `e1, e2`. Survive between inspects on same page. Change after SPA navigation (re-inspect needed).
 - **3 targeting modes** — uid (from inspect), CSS selector (`--selector`), coordinates (`--xy`)
 - **JS click fallback** — when a11y reports "disabled" but DOM isn't, click falls back to `.click()`
@@ -68,6 +69,8 @@ cargo clippy -- -D warnings  # zero warnings enforced in CI
 - `--stealth` patches are CDP-level (Page.addScriptToEvaluateOnNewDocument), not Chrome flags. `--disable-blink-features=AutomationControlled` is a myth — doesn't work on modern Chrome.
 - After SPA navigation (`back`, `click` that triggers route change), UIDs change. Always re-inspect.
 - For SPA product/detail pages, prefer `goto <direct-url>` over `click <link-uid>` — click may open a modal instead of navigating.
+- DataDome/Kasada: `--stealth` is NOT enough. These detect Chromium binary fingerprints (canvas, audio, codecs). Use `--connect` to a real installed Chrome. Tested: Leboncoin passes with `--connect`, fails with `--stealth` alone.
+- `Runtime.evaluate` works WITHOUT `Runtime.enable`. Stealth mode skips `Runtime.enable` to avoid the #1 CDP detection vector.
 
 ## Linting
 

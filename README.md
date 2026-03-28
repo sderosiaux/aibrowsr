@@ -154,7 +154,7 @@ aibrowsr eval "JSON.stringify([...document.querySelectorAll('h2')].map(e => e.te
 
 ## Stealth Mode
 
-Many sites (Cloudflare, Turnstile) block headless Chrome. `--stealth` patches automation fingerprints via CDP:
+Many sites (Cloudflare, Turnstile) block headless Chrome. `--stealth` patches 7 automation fingerprints via CDP:
 
 ```bash
 aibrowsr --stealth goto https://protected-site.com --inspect
@@ -166,8 +166,30 @@ What it patches:
 - Permissions API → consistent with real browser
 - WebGL renderer → masks ANGLE/headless fingerprint
 - User-Agent → removes "HeadlessChrome"
+- Input `screenX`/`pageX` leak → random offset added
+- `Runtime.enable` → skipped (the #1 CDP detection vector)
 
-No fake Chrome flags — all patches are CDP-level (`Page.addScriptToEvaluateOnNewDocument`).
+All patches are CDP-level (`Page.addScriptToEvaluateOnNewDocument`). No fake Chrome flags.
+
+### Heavy bot protection (DataDome, Kasada)
+
+Some sites (Leboncoin, etc.) use advanced fingerprinting that detects bundled Chromium regardless of CDP patches. For these, connect to your real installed Chrome instead:
+
+```bash
+# Launch your real Chrome with debugging enabled
+google-chrome --remote-debugging-port=9222 &
+
+# Connect aibrowsr to it
+aibrowsr --connect http://127.0.0.1:9222 goto https://www.leboncoin.fr --inspect
+```
+
+Real Chrome has genuine canvas/audio/codec fingerprints that Chromium lacks.
+
+| Protection Level | Solution |
+|---|---|
+| None | `aibrowsr goto ...` |
+| Cloudflare/Turnstile | `aibrowsr --stealth goto ...` |
+| DataDome/Kasada | `aibrowsr --connect` to real Chrome |
 
 ## JSON Mode
 

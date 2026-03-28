@@ -11,7 +11,13 @@ LLM USAGE GUIDE:
 
   Stealth (bypass Cloudflare/bot detection):
     aibrowsr --stealth goto https://protected-site.com --inspect
-    # Patches navigator.webdriver, chrome.runtime, UA, WebGL fingerprint
+    # Patches navigator.webdriver, chrome.runtime, UA, WebGL, input leak, skips Runtime.enable
+
+  Heavy bot protection (DataDome, Kasada — when --stealth isn't enough):
+    # Use your real Chrome instead of bundled Chromium:
+    google-chrome --remote-debugging-port=9222 &
+    aibrowsr --connect http://127.0.0.1:9222 goto https://protected-site.com --inspect
+    # Real Chrome passes fingerprint checks that Chromium can't
 
   Targeting elements (3 modes):
     aibrowsr click n40                              # by uid from inspect
