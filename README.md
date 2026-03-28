@@ -12,6 +12,10 @@
 
 **Browser automation that speaks LLM.**
 
+> You're not the user. Your LLM is.
+>
+> You don't need to read this README. Your agent does. Install it, run `aibrowsr --help`, and let the LLM figure it out. The CLI embeds its own usage guide, every error comes with a hint for the next action, and `--json` mode outputs structured data an agent can parse without you writing a single adapter. This page is here because GitHub expects one.
+
 Playwright returns 2,000 tokens of raw HTML. aibrowsr returns 50 tokens of accessibility tree with stable element IDs. No CSS selectors to write, no DOM to parse.
 
 ```bash
