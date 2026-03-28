@@ -22,7 +22,7 @@ pub async fn output_action(
     if json_mode {
         let mut obj = json!({"ok": true, "message": msg});
         if inspect {
-            let snapshot = commands::inspect::run(client, false, max_depth, None).await?;
+            let snapshot = commands::inspect::run(client, false, max_depth, None, None).await?;
             obj["snapshot"] = json!(snapshot.text);
             if let Some(browser_s) = store.browsers.get_mut(browser_name) {
                 let page = session::ensure_page(browser_s, page_name, target_id);
@@ -33,7 +33,7 @@ pub async fn output_action(
     } else {
         println!("{msg}");
         if inspect {
-            let snapshot = commands::inspect::run(client, false, max_depth, None).await?;
+            let snapshot = commands::inspect::run(client, false, max_depth, None, None).await?;
             if let Some(browser_s) = store.browsers.get_mut(browser_name) {
                 let page = session::ensure_page(browser_s, page_name, target_id);
                 page.uid_map = snapshot.uid_map;
@@ -65,7 +65,7 @@ pub async fn output_goto(
     if json_mode {
         let mut obj = json!({"ok": true, "url": url, "title": title});
         if inspect {
-            let snapshot = commands::inspect::run(client, false, max_depth, None).await?;
+            let snapshot = commands::inspect::run(client, false, max_depth, None, None).await?;
             obj["snapshot"] = json!(snapshot.text);
             page.uid_map = snapshot.uid_map;
         }
@@ -73,7 +73,7 @@ pub async fn output_goto(
     } else {
         println!("{url} — {title}");
         if inspect {
-            let snapshot = commands::inspect::run(client, false, max_depth, None).await?;
+            let snapshot = commands::inspect::run(client, false, max_depth, None, None).await?;
             page.uid_map = snapshot.uid_map;
             println!("{}", snapshot.text);
         }

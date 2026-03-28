@@ -161,6 +161,9 @@ enum Command {
         /// Only inspect children of this uid
         #[arg(long)]
         uid: Option<String>,
+        /// Only show nodes matching these roles (comma-separated, e.g. "button,link,textbox")
+        #[arg(long)]
+        filter: Option<String>,
     },
 
     /// Capture a screenshot
@@ -558,8 +561,9 @@ async fn run(cli: Cli) -> Result<(), Box<dyn std::error::Error>> {
             }
         }
 
-        Command::Inspect { verbose, max_depth, uid } => {
-            let snapshot = commands::inspect::run(&client, verbose, max_depth, uid.as_deref()).await?;
+        Command::Inspect { verbose, max_depth, uid, filter } => {
+            let role_filter: Option<Vec<&str>> = filter.as_deref().map(|f| f.split(',').map(str::trim).collect());
+            let snapshot = commands::inspect::run(&client, verbose, max_depth, uid.as_deref(), role_filter.as_deref()).await?;
             if let Some(browser_s) = store.browsers.get_mut(&cli.browser) {
                 let page = session::ensure_page(browser_s, &cli.page, &target_id);
                 page.uid_map = snapshot.uid_map;

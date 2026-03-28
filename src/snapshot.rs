@@ -26,6 +26,7 @@ pub async fn take_snapshot(
     verbose: bool,
     max_depth: Option<usize>,
     focus_uid: Option<&str>,
+    role_filter: Option<&[&str]>,
 ) -> Result<Snapshot, CdpClientError> {
     // Enable accessibility domain
     client
@@ -36,7 +37,7 @@ pub async fn take_snapshot(
         .call("Accessibility.getFullAXTree", serde_json::json!({}))
         .await?;
 
-    let (text, uid_map) = format_ax_tree(&result.nodes, verbose, max_depth, focus_uid);
+    let (text, uid_map) = format_ax_tree(&result.nodes, verbose, max_depth, focus_uid, role_filter);
 
     Ok(Snapshot { text, uid_map })
 }
@@ -54,6 +55,7 @@ fn format_ax_tree(
     verbose: bool,
     max_depth: Option<usize>,
     focus_uid: Option<&str>,
+    role_filter: Option<&[&str]>,
 ) -> (String, HashMap<String, ElementRef>) {
     // Build lookup: nodeId → AXNode
     let node_by_id: HashMap<&str, &AXNode> = nodes
@@ -133,6 +135,32 @@ fn format_ax_tree(
         &mut uid_map,
         &mut output,
     );
+
+    // Post-filter by role if requested
+    let output = if let Some(roles) = role_filter {
+        output
+            .lines()
+            .filter(|line| {
+                // Keep lines where the role (word after uid=nN) matches the filter
+                // Format: "  uid=n47 button "Sign In" focused"
+                let trimmed = line.trim();
+                if let Some(after_uid) = trimmed.strip_prefix("uid=") {
+                    // Skip the uid part (e.g. "n47"), get the role
+                    if let Some(rest) = after_uid.split_once(' ') {
+                        let role = rest.1.split([' ', '"']).next().unwrap_or("");
+                        return roles.iter().any(|r| r.eq_ignore_ascii_case(role));
+                    }
+                }
+                false
+            })
+            .fold(String::new(), |mut acc, line| {
+                acc.push_str(line.trim_start());
+                acc.push('\n');
+                acc
+            })
+    } else {
+        output
+    };
 
     (output, uid_map)
 }
@@ -427,7 +455,7 @@ mod tests {
             },
         ];
 
-        let (text, uid_map) = format_ax_tree(&nodes, false, None, None);
+        let (text, uid_map) = format_ax_tree(&nodes, false, None, None, None);
         assert!(text.contains("uid=n10 heading \"Welcome\" level=1"));
         assert!(uid_map.contains_key("n10"));
         assert_eq!(uid_map["n10"].backend_node_id(), Some(10));
@@ -464,7 +492,7 @@ mod tests {
             },
         ];
 
-        let (text, uid_map) = format_ax_tree(&nodes, false, None, None);
+        let (text, uid_map) = format_ax_tree(&nodes, false, None, None, None);
         assert!(!text.contains("ignored"));
         assert!(text.contains("uid=n20 button \"Click me\" focused"));
         assert_eq!(uid_map.len(), 1);
@@ -501,7 +529,7 @@ mod tests {
                 ..default_ax_node()
             },
         ];
-        let (text, _) = format_ax_tree(&nodes, false, Some(1), None);
+        let (text, _) = format_ax_tree(&nodes, false, Some(1), None, None);
         assert!(text.contains("Root"));
         assert!(text.contains("Child"));
         assert!(!text.contains("Grand")); // depth 2 filtered
@@ -539,7 +567,7 @@ mod tests {
             },
         ];
         // n1=WebArea, n2=heading, n3=button — focus on n3
-        let (text, _) = format_ax_tree(&nodes, false, None, Some("n3"));
+        let (text, _) = format_ax_tree(&nodes, false, None, Some("n3"), None);
         assert!(text.contains("Submit"));
         assert!(!text.contains("Title"));
     }
@@ -555,7 +583,7 @@ mod tests {
             backend_dom_node_id: Some(1),
             ..default_ax_node()
         }];
-        let (text, _) = format_ax_tree(&nodes, false, None, Some("e99"));
+        let (text, _) = format_ax_tree(&nodes, false, None, Some("e99"), None);
         assert!(text.contains("not found"));
     }
 }
