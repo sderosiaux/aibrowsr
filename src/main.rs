@@ -476,7 +476,9 @@ async fn run(cli: Cli) -> Result<(), BoxError> {
     // All other commands need a browser connection + CDP client
     let mut store = session::load_session()?;
 
-    let want_headless = !cli.headed;
+    // If a session exists, respect its mode. Only use --headed for NEW sessions.
+    let existing_mode = store.browsers.get(&cli.browser).map(|b| b.headless);
+    let want_headless = existing_mode.unwrap_or(!cli.headed);
 
     // Try to reuse existing session, or launch a new browser
     let (conn, browser_client) = if let Some(existing) = store.browsers.get(&cli.browser) {
