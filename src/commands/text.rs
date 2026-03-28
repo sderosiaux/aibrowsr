@@ -6,13 +6,41 @@ use crate::cdp::client::CdpClient;
 use crate::cdp::types::{EvaluateResult, ResolveNodeParams, ResolveNodeResult};
 use crate::element_ref::ElementRef;
 
-/// Extract visible text from the page or a specific element.
+/// Extract visible text from the page, a specific element by uid, or a CSS selector.
 pub async fn run(
     client: &CdpClient,
     uid: Option<&str>,
+    selector: Option<&str>,
     uid_map: &HashMap<String, ElementRef>,
 ) -> Result<String, Box<dyn std::error::Error>> {
-    let raw = match uid {
+    let raw = if let Some(sel) = selector {
+        // Selector-based extraction
+        let escaped = sel.replace('\\', "\\\\").replace('\'', "\\'");
+        let expr = format!(
+            "(() => {{ const el = document.querySelector('{escaped}'); return el ? el.innerText || '' : ''; }})()"
+        );
+        let result: EvaluateResult = client
+            .call(
+                "Runtime.evaluate",
+                json!({
+                    "expression": expr,
+                    "returnByValue": true,
+                }),
+            )
+            .await?;
+        let text = result
+            .result
+            .value
+            .as_ref()
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string();
+        if text.is_empty() {
+            return Err(format!("No element matches selector '{sel}' or element has no text.").into());
+        }
+        text
+    } else {
+        match uid {
         None => {
             // Whole page text
             let result: EvaluateResult = client
@@ -76,6 +104,7 @@ pub async fn run(
                 .unwrap_or("")
                 .to_string()
         }
+    }
     };
 
     Ok(collapse_blank_lines(&raw))

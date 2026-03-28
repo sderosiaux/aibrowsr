@@ -64,6 +64,10 @@ struct Cli {
     #[arg(long)]
     json: bool,
 
+    /// Max depth for --inspect output (used by goto, click, fill, etc.)
+    #[arg(long)]
+    max_depth: Option<usize>,
+
     /// Named page/tab within the browser (default: "default")
     #[arg(long, default_value = "default")]
     page: String,
@@ -127,6 +131,12 @@ enum Command {
     Text {
         /// Element uid to extract text from (default: entire page)
         uid: Option<String>,
+        /// CSS selector to extract text from (e.g. "article", ".content")
+        #[arg(long)]
+        selector: Option<String>,
+        /// Truncate output to N characters (appends "..." if truncated)
+        #[arg(long)]
+        truncate: Option<usize>,
     },
 
     /// Navigate back in browser history
@@ -404,7 +414,7 @@ async fn run(cli: Cli) -> Result<(), Box<dyn std::error::Error>> {
     match cli.command {
         Command::Goto { url, inspect } => {
             let result = commands::goto::run(&client, &url, cli.timeout).await?;
-            output_goto(&client, &mut store, &cli.browser, &cli.page, &target_id, &result.url, &result.title, inspect, json_mode).await?;
+            output_goto(&client, &mut store, &cli.browser, &cli.page, &target_id, &result.url, &result.title, inspect, cli.max_depth, json_mode).await?;
         }
 
         Command::Click { uid, selector, xy, inspect } => {
@@ -431,7 +441,7 @@ async fn run(cli: Cli) -> Result<(), Box<dyn std::error::Error>> {
                 commands::click::run(&client, &uid_map, uid).await?
             };
 
-            output_action(&client, &mut store, &cli.browser, &cli.page, &target_id, msg, inspect, json_mode).await?;
+            output_action(&client, &mut store, &cli.browser, &cli.page, &target_id, msg, inspect, cli.max_depth, json_mode).await?;
         }
 
         Command::Fill { uid, selector, value, inspect } => {
@@ -452,7 +462,7 @@ async fn run(cli: Cli) -> Result<(), Box<dyn std::error::Error>> {
                 commands::fill::run(&client, &uid_map, uid, &value).await?
             };
 
-            output_action(&client, &mut store, &cli.browser, &cli.page, &target_id, msg, inspect, json_mode).await?;
+            output_action(&client, &mut store, &cli.browser, &cli.page, &target_id, msg, inspect, cli.max_depth, json_mode).await?;
         }
 
         Command::FillForm { pairs, inspect } => {
@@ -468,14 +478,32 @@ async fn run(cli: Cli) -> Result<(), Box<dyn std::error::Error>> {
 
             let msg = commands::fill::run_form(&client, &uid_map, &parsed).await?;
 
-            output_action(&client, &mut store, &cli.browser, &cli.page, &target_id, msg, inspect, json_mode).await?;
+            output_action(&client, &mut store, &cli.browser, &cli.page, &target_id, msg, inspect, cli.max_depth, json_mode).await?;
         }
 
-        Command::Text { uid } => {
+        Command::Text { uid, selector, truncate } => {
+            if uid.is_some() && selector.is_some() {
+                return Err("Only one of uid or --selector can be provided.".into());
+            }
             let uid_map = get_uid_map(&store, &cli.browser, &cli.page);
-            let text = commands::text::run(&client, uid.as_deref(), &uid_map).await?;
+            let text = commands::text::run(&client, uid.as_deref(), selector.as_deref(), &uid_map).await?;
+            let full_length = text.len();
+            let (text, truncated) = if let Some(n) = truncate {
+                if text.len() > n {
+                    (format!("{}...", &text[..n]), true)
+                } else {
+                    (text, false)
+                }
+            } else {
+                (text, false)
+            };
             if json_mode {
-                json_output(&json!({"ok": true, "text": text}));
+                let mut obj = json!({"ok": true, "text": text});
+                if truncated {
+                    obj["truncated"] = json!(true);
+                    obj["fullLength"] = json!(full_length);
+                }
+                json_output(&obj);
             } else {
                 println!("{text}");
             }
@@ -672,12 +700,13 @@ async fn output_action(
     target_id: &str,
     msg: String,
     inspect: bool,
+    max_depth: Option<usize>,
     json_mode: bool,
 ) -> Result<(), Box<dyn std::error::Error>> {
     if json_mode {
         let mut obj = json!({"ok": true, "message": msg});
         if inspect {
-            let snapshot = commands::inspect::run(client, false, None, None).await?;
+            let snapshot = commands::inspect::run(client, false, max_depth, None).await?;
             obj["snapshot"] = json!(snapshot.text);
             if let Some(browser_s) = store.browsers.get_mut(browser_name) {
                 let page = session::ensure_page(browser_s, page_name, target_id);
@@ -688,7 +717,7 @@ async fn output_action(
     } else {
         println!("{msg}");
         if inspect {
-            let snapshot = commands::inspect::run(client, false, None, None).await?;
+            let snapshot = commands::inspect::run(client, false, max_depth, None).await?;
             if let Some(browser_s) = store.browsers.get_mut(browser_name) {
                 let page = session::ensure_page(browser_s, page_name, target_id);
                 page.uid_map = snapshot.uid_map;
@@ -709,6 +738,7 @@ async fn output_goto(
     url: &str,
     title: &str,
     inspect: bool,
+    max_depth: Option<usize>,
     json_mode: bool,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let page = session::ensure_page(
@@ -719,7 +749,7 @@ async fn output_goto(
     if json_mode {
         let mut obj = json!({"ok": true, "url": url, "title": title});
         if inspect {
-            let snapshot = commands::inspect::run(client, false, None, None).await?;
+            let snapshot = commands::inspect::run(client, false, max_depth, None).await?;
             obj["snapshot"] = json!(snapshot.text);
             page.uid_map = snapshot.uid_map;
         }
@@ -727,7 +757,7 @@ async fn output_goto(
     } else {
         println!("{url} — {title}");
         if inspect {
-            let snapshot = commands::inspect::run(client, false, None, None).await?;
+            let snapshot = commands::inspect::run(client, false, max_depth, None).await?;
             page.uid_map = snapshot.uid_map;
             println!("{}", snapshot.text);
         }
