@@ -12,6 +12,9 @@ const SESSION_FILE: &str = "sessions.json";
 pub struct SessionStore {
     #[serde(default)]
     pub browsers: HashMap<String, BrowserSession>,
+    /// Tracks the file modification time when loaded (not serialized).
+    #[serde(skip)]
+    pub loaded_mtime: Option<std::time::SystemTime>,
 }
 
 /// Per-browser session state.
@@ -44,16 +47,29 @@ pub fn load_session() -> Result<SessionStore, SessionError> {
         return Ok(SessionStore::default());
     }
 
+    let mtime = std::fs::metadata(&path).ok().and_then(|m| m.modified().ok());
+
     let contents = std::fs::read_to_string(&path)
         .map_err(|e| SessionError(format!("Failed to read {}: {e}", path.display())))?;
 
-    serde_json::from_str(&contents)
-        .map_err(|e| SessionError(format!("Failed to parse {}: {e}", path.display())))
+    let mut store: SessionStore = serde_json::from_str(&contents)
+        .map_err(|e| SessionError(format!("Failed to parse {}: {e}", path.display())))?;
+    store.loaded_mtime = mtime;
+    Ok(store)
 }
 
 /// Save the session store to disk.
 pub fn save_session(store: &SessionStore) -> Result<(), SessionError> {
     let path = session_path()?;
+
+    // Detect concurrent modification (another aibrowsr process touched the file)
+    if let Some(loaded_mtime) = store.loaded_mtime {
+        if let Ok(current_mtime) = std::fs::metadata(&path).and_then(|m| m.modified()) {
+            if current_mtime != loaded_mtime {
+                eprintln!("warning: session file was modified by another process. Use --browser <name> to isolate parallel agents.");
+            }
+        }
+    }
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent)
             .map_err(|e| SessionError(format!("Failed to create dir: {e}")))?;

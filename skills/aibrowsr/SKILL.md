@@ -133,3 +133,4 @@ aibrowsr close [--purge]
 8. **--max-depth works everywhere** — on standalone inspect AND on goto/click/fill --inspect.
 9. **Use --filter** to find elements fast: `inspect --filter "button,link,textbox"`.
 10. **close --purge** deletes browser profile (cookies, cache) when done.
+11. **Parallel agents**: use `--browser <unique-name>` to isolate sessions. Without it, parallel agents share the same Chrome and corrupt each other's state.

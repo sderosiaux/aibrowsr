@@ -66,6 +66,10 @@ LLM USAGE GUIDE:
     aibrowsr --page tab2 goto https://other.com
     aibrowsr --page tab2 inspect
 
+  Parallel agents (avoid session conflicts):
+    aibrowsr --browser agent1 goto https://example.com  # isolated browser per agent
+    aibrowsr --browser agent2 goto https://other.com    # separate Chrome instance
+
   JSON mode:
     aibrowsr --json goto https://example.com
     -> {"ok":true,"url":"...","title":"..."}
