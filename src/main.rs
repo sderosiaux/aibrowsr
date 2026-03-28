@@ -1,6 +1,7 @@
 mod browser;
 mod cdp;
 mod commands;
+#[cfg(unix)]
 mod daemon;
 mod element;
 mod element_ref;
@@ -279,8 +280,15 @@ async fn run(cli: Cli) -> Result<(), Box<dyn std::error::Error>> {
         Command::Daemon { action } => {
             match action {
                 DaemonAction::Start => {
-                    let socket_path = session::daemon_socket_path()?;
-                    daemon::run_daemon(&socket_path).await?;
+                    #[cfg(unix)]
+                    {
+                        let socket_path = session::daemon_socket_path()?;
+                        daemon::run_daemon(&socket_path).await?;
+                    }
+                    #[cfg(not(unix))]
+                    {
+                        return Err("Daemon is not supported on Windows. Commands work without a daemon.".into());
+                    }
                 }
             }
             return Ok(());
@@ -876,6 +884,16 @@ fn cmd_status(json_mode: bool) -> Result<(), Box<dyn std::error::Error>> {
 }
 
 async fn cmd_stop(json_mode: bool) -> Result<(), Box<dyn std::error::Error>> {
+    #[cfg(not(unix))]
+    {
+        let msg = "Daemon is not supported on this platform.";
+        if json_mode { json_output(&json!({"ok": true, "message": msg})); }
+        else { println!("{msg}"); }
+        return Ok(());
+    }
+
+    #[cfg(unix)]
+    {
     let socket_path = session::daemon_socket_path()?;
     if !socket_path.exists() {
         if json_mode {
@@ -886,7 +904,6 @@ async fn cmd_stop(json_mode: bool) -> Result<(), Box<dyn std::error::Error>> {
         return Ok(());
     }
 
-    // Send stop command
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
     use tokio::net::UnixStream;
 
@@ -905,6 +922,7 @@ async fn cmd_stop(json_mode: bool) -> Result<(), Box<dyn std::error::Error>> {
         println!("Daemon stopped.");
     }
     Ok(())
+    } // #[cfg(unix)]
 }
 
 fn cmd_close(browser_name: &str, json_mode: bool) -> Result<(), Box<dyn std::error::Error>> {
