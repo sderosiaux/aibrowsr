@@ -107,6 +107,7 @@ UIDs are stable across inspects (based on Chrome's `backendNodeId`). The agent i
 --page <name>            Named page/tab (default: "default")
 --connect [url]          Connect to running Chrome (auto or explicit)
 --headed                 Show browser window (default is headless)
+--stealth                Bypass bot detection (Cloudflare, Turnstile)
 --timeout <seconds>      Command timeout (default: 30)
 --max-depth <N>          Limit inspect tree depth (works with --inspect on any command)
 --ignore-https-errors    Accept self-signed certificates
@@ -150,6 +151,23 @@ aibrowsr text --selector "[role=main]" --truncate 1000
 # Structured data via JS
 aibrowsr eval "JSON.stringify([...document.querySelectorAll('h2')].map(e => e.textContent))"
 ```
+
+## Stealth Mode
+
+Many sites (Cloudflare, Turnstile) block headless Chrome. `--stealth` patches automation fingerprints via CDP:
+
+```bash
+aibrowsr --stealth goto https://protected-site.com --inspect
+```
+
+What it patches:
+- `navigator.webdriver` → `undefined`
+- `chrome.runtime` → mocked (headless doesn't have it)
+- Permissions API → consistent with real browser
+- WebGL renderer → masks ANGLE/headless fingerprint
+- User-Agent → removes "HeadlessChrome"
+
+No fake Chrome flags — all patches are CDP-level (`Page.addScriptToEvaluateOnNewDocument`).
 
 ## JSON Mode
 

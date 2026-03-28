@@ -1,12 +1,17 @@
 LLM USAGE GUIDE:
   Workflow: inspect -> read uids -> act (click/fill) -> inspect again.
-  Use --json for structured output. Headless by default.
+  Headless + stealth by default with --stealth. Use --json for structured output.
 
   Quick start:
     aibrowsr goto https://example.com --inspect
-    aibrowsr click n30 --inspect
+    aibrowsr click n12 --inspect
     aibrowsr fill --uid n20 "hello@example.com"
+    aibrowsr read                              # article content (Readability)
     aibrowsr eval "document.title"
+
+  Stealth (bypass Cloudflare/bot detection):
+    aibrowsr --stealth goto https://protected-site.com --inspect
+    # Patches navigator.webdriver, chrome.runtime, UA, WebGL fingerprint
 
   Targeting elements (3 modes):
     aibrowsr click n40                              # by uid from inspect
@@ -14,39 +19,45 @@ LLM USAGE GUIDE:
     aibrowsr click --xy 100,200                    # by coordinates
     aibrowsr fill --uid n20 "value"                 # fill by uid
     aibrowsr fill --selector "input[name=q]" "val" # fill by CSS selector
-    aibrowsr type "hello" --selector "input.search"  # type with focus
 
-  Inspection:
-    aibrowsr inspect                        # accessibility tree with uid=nN
-    aibrowsr inspect --max-depth 2          # limit depth (saves tokens)
-    aibrowsr inspect --uid n50               # subtree only
-    aibrowsr text                           # full visible text (use "read" for articles)
-    aibrowsr text n50 --truncate 500                        # text of specific element
+  Inspection + filtering:
+    aibrowsr inspect                               # full accessibility tree
+    aibrowsr inspect --max-depth 2                 # limit depth (saves tokens)
+    aibrowsr inspect --filter "button,link"        # only these roles (flat list)
+    aibrowsr inspect --uid n50                     # subtree only
+
+  Content extraction (choose the right tool):
+    aibrowsr read                                  # article/main content (Readability)
+    aibrowsr read --truncate 1000                  # capped at N chars
+    aibrowsr text --selector "main" --truncate 500 # visible text of CSS-matched element
+    aibrowsr text                                  # full page innerText (verbose)
+    aibrowsr eval "JSON.stringify(...)"            # structured data via JS
 
   Navigation:
-    aibrowsr goto https://example.com       # navigate
-    aibrowsr back                           # history.back()
-    aibrowsr scroll down                    # scroll page
-    aibrowsr wait text "Success"            # wait for content
-
-  Other:
-    aibrowsr screenshot                     # returns file path (PNG)
-    aibrowsr eval "JSON.stringify(...)"     # run JS, get result
-    aibrowsr press Enter                    # press key
-    aibrowsr hover n30                       # hover element
-    aibrowsr fill-form n20="a" n30="b"        # batch fill by uid
+    aibrowsr goto https://example.com              # navigate
+    aibrowsr back                                  # history.back()
+    aibrowsr scroll down                           # scroll page
+    aibrowsr wait text "Success"                   # wait for content
 
   Multi-tab:
     aibrowsr --page tab2 goto https://other.com
     aibrowsr --page tab2 inspect
 
-  JSON mode (for programmatic use):
+  JSON mode:
     aibrowsr --json goto https://example.com
     -> {"ok":true,"url":"...","title":"..."}
-    Errors: {"ok":false,"error":"...","hint":"..."} (exit 0)
+    Errors: {"ok":false,"error":"...","hint":"..."} (exit 0, always parseable)
 
-  Tips:
-    - inspect before interacting -- uids change when the page mutates.
-    - --inspect on click/fill returns updated page state in one call.
+  Cleanup:
+    aibrowsr close                                 # stop browser
+    aibrowsr close --purge                         # stop + delete cookies/profile
+
+  Important tips:
+    - Use --stealth on sites with bot protection (Cloudflare, Turnstile).
+    - UIDs (n47, n123) are stable across inspects on the same page.
+    - After SPA navigation (back, click that triggers route change), re-inspect — UIDs change.
+    - For SPA product pages, prefer `goto <direct-url>` over `click` (avoids modal routing).
+    - Use `read` for articles/blogs, `text --selector` for scoped extraction, `eval` for structured data.
     - Prefer inspect over screenshot (~50 vs ~100K tokens).
-    - Use --selector when inspect uids aren't available or practical.
+    - --max-depth works on goto/click/fill --inspect too (not just standalone inspect).
+    - --filter gives a flat list — great for finding interactive elements quickly.
