@@ -13,7 +13,7 @@ use crate::session::{self, SessionStore};
 use crate::Cli;
 
 /// Run pipe mode: persistent CDP connection, reading JSON commands from stdin.
-pub async fn run_pipe(cli: &Cli) -> Result<(), Box<dyn std::error::Error>> {
+pub async fn run_pipe(cli: &Cli) -> Result<(), crate::BoxError> {
     let mut store = session::load_session()?;
     let want_headless = !cli.headed;
 
@@ -104,7 +104,7 @@ pub async fn run_replay(
     cli: &Cli,
     file: &str,
     vars: Option<&[String]>,
-) -> Result<(), Box<dyn std::error::Error>> {
+) -> Result<(), crate::BoxError> {
     let content = std::fs::read_to_string(file)
         .map_err(|e| format!("Cannot read replay file '{file}': {e}"))?;
 
@@ -204,7 +204,7 @@ async fn dispatch(
 ) -> Value {
     let cmd_name = cmd.get("cmd").and_then(Value::as_str).unwrap_or("");
 
-    let result: Result<Value, Box<dyn std::error::Error>> = match cmd_name {
+    let result: Result<Value, crate::BoxError> = match cmd_name {
         "goto" => dispatch_goto(client, store, browser_name, page_name, target_id, timeout, global_max_depth, cmd).await,
         "click" => dispatch_click(client, store, browser_name, page_name, target_id, global_max_depth, cmd).await,
         "fill" => dispatch_fill(client, store, browser_name, page_name, target_id, global_max_depth, cmd).await,
@@ -258,7 +258,7 @@ async fn dispatch_goto(
     timeout: u64,
     global_max_depth: Option<usize>,
     cmd: &Value,
-) -> Result<Value, Box<dyn std::error::Error>> {
+) -> Result<Value, crate::BoxError> {
     let url = cmd.get("url").and_then(Value::as_str).ok_or("goto: missing \"url\"")?;
     let inspect = cmd.get("inspect").and_then(Value::as_bool).unwrap_or(false);
     let max_depth = cmd_max_depth(cmd).or(global_max_depth);
@@ -285,7 +285,7 @@ async fn dispatch_click(
     target_id: &str,
     global_max_depth: Option<usize>,
     cmd: &Value,
-) -> Result<Value, Box<dyn std::error::Error>> {
+) -> Result<Value, crate::BoxError> {
     let inspect = cmd.get("inspect").and_then(Value::as_bool).unwrap_or(false);
     let max_depth = cmd_max_depth(cmd).or(global_max_depth);
 
@@ -315,7 +315,7 @@ async fn dispatch_fill(
     target_id: &str,
     global_max_depth: Option<usize>,
     cmd: &Value,
-) -> Result<Value, Box<dyn std::error::Error>> {
+) -> Result<Value, crate::BoxError> {
     let value = cmd.get("value").and_then(Value::as_str).ok_or("fill: missing \"value\"")?;
     let inspect = cmd.get("inspect").and_then(Value::as_bool).unwrap_or(false);
     let max_depth = cmd_max_depth(cmd).or(global_max_depth);
@@ -345,7 +345,7 @@ async fn dispatch_inspect(
     page_name: &str,
     target_id: &str,
     cmd: &Value,
-) -> Result<Value, Box<dyn std::error::Error>> {
+) -> Result<Value, crate::BoxError> {
     let max_depth = cmd_max_depth(cmd);
     let filter_str = cmd.get("filter").and_then(Value::as_str);
     let role_filter: Option<Vec<&str>> = filter_str.map(|f| f.split(',').map(str::trim).collect());
@@ -367,7 +367,7 @@ async fn dispatch_diff(
     browser_name: &str,
     page_name: &str,
     target_id: &str,
-) -> Result<Value, Box<dyn std::error::Error>> {
+) -> Result<Value, crate::BoxError> {
     let old_text = store
         .browsers
         .get(browser_name)
@@ -397,7 +397,7 @@ async fn dispatch_diff(
 async fn dispatch_eval(
     client: &CdpClient,
     cmd: &Value,
-) -> Result<Value, Box<dyn std::error::Error>> {
+) -> Result<Value, crate::BoxError> {
     let expression = cmd.get("expression").and_then(Value::as_str).ok_or("eval: missing \"expression\"")?;
 
     let expr = if let Some(sel) = cmd.get("selector").and_then(Value::as_str) {
@@ -414,7 +414,7 @@ async fn dispatch_eval(
 async fn dispatch_read(
     client: &CdpClient,
     cmd: &Value,
-) -> Result<Value, Box<dyn std::error::Error>> {
+) -> Result<Value, crate::BoxError> {
     let truncate = cmd.get("truncate").and_then(Value::as_u64).map(|v| v as usize);
     let result = commands::read::run(client, false, truncate).await?;
 
@@ -434,7 +434,7 @@ async fn dispatch_text(
     browser_name: &str,
     page_name: &str,
     cmd: &Value,
-) -> Result<Value, Box<dyn std::error::Error>> {
+) -> Result<Value, crate::BoxError> {
     let selector = cmd.get("selector").and_then(Value::as_str);
     let truncate = cmd.get("truncate").and_then(Value::as_u64).map(|v| v as usize);
     let uid_map = get_uid_map(store, browser_name, page_name);
@@ -461,7 +461,7 @@ async fn dispatch_text(
 
 async fn dispatch_screenshot(
     client: &CdpClient,
-) -> Result<Value, Box<dyn std::error::Error>> {
+) -> Result<Value, crate::BoxError> {
     let path = commands::screenshot::run(client, None).await?;
     Ok(json!({"ok": true, "path": path}))
 }
@@ -470,7 +470,7 @@ async fn dispatch_wait(
     client: &CdpClient,
     default_timeout: u64,
     cmd: &Value,
-) -> Result<Value, Box<dyn std::error::Error>> {
+) -> Result<Value, crate::BoxError> {
     // Accept both {"what":"text","pattern":"X"} and {"text":"X"} / {"url":"X"} / {"selector":"X"}
     let (what, pattern) = if let Some(w) = cmd.get("what").and_then(Value::as_str) {
         let p = cmd.get("pattern").and_then(Value::as_str)
@@ -493,7 +493,7 @@ async fn dispatch_wait(
 
 async fn dispatch_back(
     client: &CdpClient,
-) -> Result<Value, Box<dyn std::error::Error>> {
+) -> Result<Value, crate::BoxError> {
     // Use CDP Page.getNavigationHistory + Page.navigateToHistoryEntry instead of
     // history.back() — the JS approach can break the WebSocket connection in pipe mode
     // because the page target changes during navigation.
@@ -527,7 +527,7 @@ async fn dispatch_scroll(
     browser_name: &str,
     page_name: &str,
     cmd: &Value,
-) -> Result<Value, Box<dyn std::error::Error>> {
+) -> Result<Value, crate::BoxError> {
     let target = cmd.get("target").and_then(Value::as_str).ok_or("scroll: missing \"target\"")?;
 
     let msg = match target {
@@ -585,7 +585,7 @@ async fn dispatch_scroll(
 async fn dispatch_type(
     client: &CdpClient,
     cmd: &Value,
-) -> Result<Value, Box<dyn std::error::Error>> {
+) -> Result<Value, crate::BoxError> {
     let text = cmd.get("text").and_then(Value::as_str).ok_or("type: missing \"text\"")?;
     let selector = cmd.get("selector").and_then(Value::as_str);
 
@@ -605,7 +605,7 @@ async fn dispatch_type(
 async fn dispatch_press(
     client: &CdpClient,
     cmd: &Value,
-) -> Result<Value, Box<dyn std::error::Error>> {
+) -> Result<Value, crate::BoxError> {
     let key = cmd.get("key").and_then(Value::as_str).ok_or("press: missing \"key\"")?;
     crate::element::press_key(client, key).await?;
     Ok(json!({"ok": true, "message": format!("Pressed {key}")}))
@@ -614,7 +614,7 @@ async fn dispatch_press(
 async fn dispatch_tabs(
     browser_client: &CdpClient,
     store: &session::SessionStore,
-) -> Result<Value, Box<dyn std::error::Error>> {
+) -> Result<Value, crate::BoxError> {
     let tabs = commands::tabs::run_structured(browser_client, store).await?;
     Ok(json!({"ok": true, "tabs": tabs}))
 }
@@ -622,7 +622,7 @@ async fn dispatch_tabs(
 async fn dispatch_network(
     client: &CdpClient,
     cmd: &Value,
-) -> Result<Value, Box<dyn std::error::Error>> {
+) -> Result<Value, crate::BoxError> {
     let filter = cmd.get("filter").and_then(Value::as_str);
     let limit = cmd.get("limit").and_then(Value::as_u64).unwrap_or(50) as usize;
     let entries = commands::network::run_retroactive(client, filter, limit).await?;
@@ -632,7 +632,7 @@ async fn dispatch_network(
 async fn dispatch_console(
     client: &CdpClient,
     cmd: &Value,
-) -> Result<Value, Box<dyn std::error::Error>> {
+) -> Result<Value, crate::BoxError> {
     let level = cmd.get("level").and_then(Value::as_str);
     let clear = cmd.get("clear").and_then(Value::as_bool).unwrap_or(false);
     let limit = cmd.get("limit").and_then(Value::as_u64).unwrap_or(50) as usize;
@@ -647,7 +647,7 @@ async fn dispatch_console(
 async fn dispatch_extract(
     client: &CdpClient,
     cmd: &Value,
-) -> Result<Value, Box<dyn std::error::Error>> {
+) -> Result<Value, crate::BoxError> {
     let selector = cmd.get("selector").and_then(Value::as_str);
     let limit = cmd.get("limit").and_then(Value::as_u64).unwrap_or(10) as usize;
     let result = commands::extract::run(client, selector, limit).await?;
@@ -666,7 +666,7 @@ async fn dispatch_navigate_and_read(
     _target_id: &str,
     timeout: u64,
     cmd: &Value,
-) -> Result<Value, Box<dyn std::error::Error>> {
+) -> Result<Value, crate::BoxError> {
     let url = cmd.get("url").and_then(Value::as_str)
         .ok_or("navigate_and_read: missing \"url\"")?;
     let truncate = cmd.get("truncate").and_then(Value::as_u64).map(|v| v as usize);
@@ -692,7 +692,7 @@ async fn dispatch_fill_and_submit(
     client: &CdpClient,
     timeout: u64,
     cmd: &Value,
-) -> Result<Value, Box<dyn std::error::Error>> {
+) -> Result<Value, crate::BoxError> {
     let fields = cmd.get("fields").and_then(Value::as_array)
         .ok_or("fill_and_submit: missing \"fields\" array")?;
     let submit_selector = cmd.get("submit").and_then(Value::as_str)
@@ -738,7 +738,7 @@ async fn dispatch_fill_and_submit(
 
 fn dispatch_history(
     cmd: &Value,
-) -> Result<Value, Box<dyn std::error::Error>> {
+) -> Result<Value, crate::BoxError> {
     let filter = cmd.get("filter").and_then(Value::as_str);
     let limit = cmd.get("limit").and_then(Value::as_u64).unwrap_or(20) as usize;
     let entries = commands::history::run(filter, limit)?;
@@ -761,7 +761,7 @@ async fn attach_snapshot(
     page_name: &str,
     target_id: &str,
     max_depth: Option<usize>,
-) -> Result<String, Box<dyn std::error::Error>> {
+) -> Result<String, crate::BoxError> {
     let snapshot = commands::inspect::run(client, false, max_depth, None, None).await?;
     if let Some(browser_s) = store.browsers.get_mut(browser_name) {
         let page = session::ensure_page(browser_s, page_name, target_id);
@@ -798,7 +798,7 @@ async fn connect_browser(
     store: &mut SessionStore,
     cli: &Cli,
     want_headless: bool,
-) -> Result<(browser::BrowserConnection, CdpClient), Box<dyn std::error::Error>> {
+) -> Result<(browser::BrowserConnection, CdpClient), crate::BoxError> {
     if let Some(existing) = store.browsers.get(&cli.browser) {
         let mode_matches = existing.headless == want_headless;
         let ws = &existing.ws_endpoint;
@@ -846,7 +846,7 @@ async fn dispatch_fill_form(
     target_id: &str,
     global_max_depth: Option<usize>,
     cmd: &Value,
-) -> Result<Value, Box<dyn std::error::Error>> {
+) -> Result<Value, crate::BoxError> {
     let pairs = cmd.get("pairs").and_then(Value::as_array)
         .ok_or("fill-form requires \"pairs\" array (e.g. [{\"uid\":\"n1\",\"value\":\"a\"}])")?;
 
@@ -877,7 +877,7 @@ async fn dispatch_hover(
     browser_name: &str,
     page_name: &str,
     cmd: &Value,
-) -> Result<Value, Box<dyn std::error::Error>> {
+) -> Result<Value, crate::BoxError> {
     let uid = cmd.get("uid").and_then(Value::as_str).ok_or("hover requires \"uid\"")?;
     let uid_map = crate::run_helpers::get_uid_map(store, browser_name, page_name);
     crate::element::hover(client, &uid_map, uid).await?;

@@ -8,7 +8,7 @@ pub async fn run(
     uid_map: &HashMap<String, ElementRef>,
     uid: &str,
     value: &str,
-) -> Result<String, Box<dyn std::error::Error>> {
+) -> Result<String, crate::BoxError> {
     crate::element::fill(client, uid_map, uid, value).await?;
     Ok(format!("Filled uid={uid} with {}", value.len(), ))
 }
@@ -17,7 +17,7 @@ pub async fn run_form(
     client: &CdpClient,
     uid_map: &HashMap<String, ElementRef>,
     pairs: &[(&str, &str)],
-) -> Result<String, Box<dyn std::error::Error>> {
+) -> Result<String, crate::BoxError> {
     let mut filled = Vec::new();
     for (uid, value) in pairs {
         crate::element::fill(client, uid_map, uid, value).await?;

@@ -7,7 +7,7 @@ pub async fn run(
     max_depth: Option<usize>,
     focus_uid: Option<&str>,
     role_filter: Option<&[&str]>,
-) -> Result<Snapshot, Box<dyn std::error::Error>> {
+) -> Result<Snapshot, crate::BoxError> {
     let snapshot = crate::snapshot::take_snapshot(client, verbose, max_depth, focus_uid, role_filter).await?;
     Ok(snapshot)
 }

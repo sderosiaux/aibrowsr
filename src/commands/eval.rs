@@ -7,7 +7,7 @@ use crate::cdp::types::EvaluateResult;
 pub async fn run_raw(
     client: &CdpClient,
     expression: &str,
-) -> Result<Value, Box<dyn std::error::Error>> {
+) -> Result<Value, crate::BoxError> {
     let result: EvaluateResult = client
         .call(
             "Runtime.evaluate",
@@ -38,7 +38,7 @@ pub async fn run_raw(
 pub async fn run(
     client: &CdpClient,
     expression: &str,
-) -> Result<String, Box<dyn std::error::Error>> {
+) -> Result<String, crate::BoxError> {
     let result: EvaluateResult = client
         .call(
             "Runtime.evaluate",

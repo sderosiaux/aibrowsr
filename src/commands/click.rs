@@ -7,7 +7,7 @@ pub async fn run(
     client: &CdpClient,
     uid_map: &HashMap<String, ElementRef>,
     uid: &str,
-) -> Result<String, Box<dyn std::error::Error>> {
+) -> Result<String, crate::BoxError> {
     crate::element::click(client, uid_map, uid).await?;
     Ok(format!("Clicked uid={uid}"))
 }

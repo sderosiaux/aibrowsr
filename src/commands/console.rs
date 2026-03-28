@@ -84,7 +84,7 @@ pub async fn run(
     level_filter: Option<&str>,
     clear: bool,
     limit: usize,
-) -> Result<Vec<ConsoleEntry>, Box<dyn std::error::Error>> {
+) -> Result<Vec<ConsoleEntry>, crate::BoxError> {
     let result: crate::cdp::types::EvaluateResult = client
         .call(
             "Runtime.evaluate",

@@ -6,7 +6,7 @@ use crate::cdp::types::{CaptureScreenshotParams, CaptureScreenshotResult};
 pub async fn run(
     client: &CdpClient,
     filename: Option<&str>,
-) -> Result<String, Box<dyn std::error::Error>> {
+) -> Result<String, crate::BoxError> {
     let result: CaptureScreenshotResult = client
         .call(
             "Page.captureScreenshot",
@@ -60,13 +60,13 @@ pub async fn run(
     Ok(path.display().to_string())
 }
 
-fn screenshot_dir() -> Result<PathBuf, Box<dyn std::error::Error>> {
+fn screenshot_dir() -> Result<PathBuf, crate::BoxError> {
     let home = dirs::home_dir().ok_or("Could not determine home directory")?;
     Ok(home.join(".aibrowsr").join("tmp"))
 }
 
 /// Minimal base64 decoder (RFC 4648). Avoids pulling in the `base64` crate.
-fn base64_decode(input: &str) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
+fn base64_decode(input: &str) -> Result<Vec<u8>, crate::BoxError> {
     const TABLE: &[u8; 64] =
         b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
 

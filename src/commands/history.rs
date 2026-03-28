@@ -13,14 +13,14 @@ pub struct HistoryEntry {
     pub page: String,
 }
 
-fn history_path() -> Result<PathBuf, Box<dyn std::error::Error>> {
+fn history_path() -> Result<PathBuf, crate::BoxError> {
     dirs::home_dir()
         .map(|h| h.join(".aibrowsr").join("history.jsonl"))
         .ok_or_else(|| "Could not determine home directory".into())
 }
 
 /// Append a navigation entry to `~/.aibrowsr/history.jsonl`.
-pub fn append(url: &str, title: &str, page: &str) -> Result<(), Box<dyn std::error::Error>> {
+pub fn append(url: &str, title: &str, page: &str) -> Result<(), crate::BoxError> {
     let path = history_path()?;
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent)?;
@@ -47,7 +47,7 @@ pub fn append(url: &str, title: &str, page: &str) -> Result<(), Box<dyn std::err
 }
 
 /// Read history, optionally filter by URL pattern, return last `limit` entries.
-pub fn run(filter: Option<&str>, limit: usize) -> Result<Vec<HistoryEntry>, Box<dyn std::error::Error>> {
+pub fn run(filter: Option<&str>, limit: usize) -> Result<Vec<HistoryEntry>, crate::BoxError> {
     let path = history_path()?;
     if !path.exists() {
         return Ok(Vec::new());

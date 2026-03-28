@@ -23,7 +23,7 @@ pub async fn run(
     client: &CdpClient,
     html: bool,
     truncate: Option<usize>,
-) -> Result<ReadResult, Box<dyn std::error::Error>> {
+) -> Result<ReadResult, crate::BoxError> {
     // Inject Readability.js into the page and parse
     #[allow(clippy::needless_raw_string_hashes)]
     let js = format!(

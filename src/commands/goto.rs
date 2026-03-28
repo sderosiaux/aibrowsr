@@ -10,7 +10,7 @@ pub struct GotoResult {
     pub title: String,
 }
 
-pub async fn run(client: &CdpClient, url: &str, timeout_secs: u64) -> Result<GotoResult, Box<dyn std::error::Error>> {
+pub async fn run(client: &CdpClient, url: &str, timeout_secs: u64) -> Result<GotoResult, crate::BoxError> {
     // Ensure Page domain is enabled so we receive loadEventFired
     client.enable("Page").await?;
 

@@ -12,7 +12,7 @@ pub async fn run(
     uid: Option<&str>,
     selector: Option<&str>,
     uid_map: &HashMap<String, ElementRef>,
-) -> Result<String, Box<dyn std::error::Error>> {
+) -> Result<String, crate::BoxError> {
     let raw = if let Some(sel) = selector {
         // Selector-based extraction with role-attribute fallback
         // "main" also matches [role=main], "nav" also matches [role=navigation], etc.

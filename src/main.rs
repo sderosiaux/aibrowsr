@@ -12,6 +12,9 @@ mod setup;
 mod snapshot;
 mod truncate;
 
+/// Shared error type alias used across the crate.
+pub(crate) type BoxError = Box<dyn std::error::Error>;
+
 use clap::{Parser, Subcommand};
 use serde_json::json;
 
@@ -395,7 +398,7 @@ async fn main() {
     }
 }
 
-async fn run(cli: Cli) -> Result<(), Box<dyn std::error::Error>> {
+async fn run(cli: Cli) -> Result<(), BoxError> {
     match cli.command {
         Command::Daemon { action } => {
             match action {

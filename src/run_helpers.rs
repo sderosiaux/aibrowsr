@@ -13,7 +13,7 @@ pub async fn connect_page(
     http_endpoint: &str,
     target_id: &str,
     stealth: bool,
-) -> Result<CdpClient, Box<dyn std::error::Error>> {
+) -> Result<CdpClient, crate::BoxError> {
     let mut last_err = String::new();
     for attempt in 0..5u32 {
         match crate::browser::get_page_ws_url(http_endpoint, target_id).await {
@@ -63,7 +63,7 @@ pub async fn output_action(
     inspect: bool,
     max_depth: Option<usize>,
     json_mode: bool,
-) -> Result<(), Box<dyn std::error::Error>> {
+) -> Result<(), crate::BoxError> {
     if json_mode {
         let mut obj = json!({"ok": true, "message": msg});
         if inspect {
@@ -103,7 +103,7 @@ pub async fn output_goto(
     inspect: bool,
     max_depth: Option<usize>,
     json_mode: bool,
-) -> Result<(), Box<dyn std::error::Error>> {
+) -> Result<(), crate::BoxError> {
     let browser_session = store.browsers.get_mut(browser_name)
         .ok_or_else(|| format!("Browser session '{browser_name}' not found in session store"))?;
     let page = session::ensure_page(
@@ -187,7 +187,7 @@ pub async fn resolve_page_target(
     client: &CdpClient,
     browser_session: &mut BrowserSession,
     page_name: &str,
-) -> Result<String, Box<dyn std::error::Error>> {
+) -> Result<String, crate::BoxError> {
     if let Some(page) = browser_session.pages.get(page_name) {
         return Ok(page.target_id.clone());
     }
@@ -233,7 +233,7 @@ pub async fn resolve_page_target(
     Ok(target_id)
 }
 
-pub fn cmd_status(json_mode: bool) -> Result<(), Box<dyn std::error::Error>> {
+pub fn cmd_status(json_mode: bool) -> Result<(), crate::BoxError> {
     let store = session::load_session()?;
     let daemon_alive = session::daemon_socket_exists();
 
@@ -284,7 +284,7 @@ pub fn cmd_status(json_mode: bool) -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-pub async fn cmd_stop(json_mode: bool) -> Result<(), Box<dyn std::error::Error>> {
+pub async fn cmd_stop(json_mode: bool) -> Result<(), crate::BoxError> {
     #[cfg(not(unix))]
     {
         let msg = "Daemon is not supported on this platform.";
@@ -326,7 +326,7 @@ pub async fn cmd_stop(json_mode: bool) -> Result<(), Box<dyn std::error::Error>>
     } // #[cfg(unix)]
 }
 
-pub fn cmd_close(browser_name: &str, purge: bool, json_mode: bool) -> Result<(), Box<dyn std::error::Error>> {
+pub fn cmd_close(browser_name: &str, purge: bool, json_mode: bool) -> Result<(), crate::BoxError> {
     let mut store = session::load_session()?;
 
     let browser = store.browsers.remove(browser_name);

@@ -11,7 +11,7 @@ pub async fn run(
     what: &str,
     pattern: &str,
     timeout_secs: u64,
-) -> Result<String, Box<dyn std::error::Error>> {
+) -> Result<String, crate::BoxError> {
     let deadline = Instant::now() + Duration::from_secs(timeout_secs);
     let poll_interval = Duration::from_millis(200);
 

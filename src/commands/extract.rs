@@ -14,7 +14,7 @@ pub async fn run(
     client: &CdpClient,
     selector: Option<&str>,
     limit: usize,
-) -> Result<ExtractResult, Box<dyn std::error::Error>> {
+) -> Result<ExtractResult, crate::BoxError> {
     // Build the JS expression, injecting `limit` and optional `selector` scope.
     let scope_js = if let Some(sel) = selector {
         let escaped = serde_json::to_string(sel).unwrap_or_default();

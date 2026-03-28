@@ -34,7 +34,7 @@ pub async fn run_retroactive(
     client: &CdpClient,
     filter: Option<&str>,
     limit: usize,
-) -> Result<Vec<NetworkEntry>, Box<dyn std::error::Error>> {
+) -> Result<Vec<NetworkEntry>, crate::BoxError> {
     let js = r"
         JSON.stringify(
             performance.getEntriesByType('resource').map(e => ({
@@ -125,7 +125,7 @@ pub async fn run_live(
     capture_body: bool,
     limit: usize,
     timeout_secs: u64,
-) -> Result<Vec<NetworkEntry>, Box<dyn std::error::Error>> {
+) -> Result<Vec<NetworkEntry>, crate::BoxError> {
     // Enable Network domain (required for live capture)
     client.enable("Network").await?;
 
