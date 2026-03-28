@@ -4,13 +4,12 @@ Browser automation for AI agents. Single Rust binary, zero runtime dependencies,
 
 ## Why
 
-Existing browser automation tools (Playwright, Puppeteer, Selenium) carry heavy runtimes (Node.js, Python) and weren't designed for AI agents. Agents need:
+Existing tools (Playwright, Puppeteer, Selenium) carry heavy runtimes and weren't designed for agents. Agents need:
 - **Minimum tokens** — a11y tree snapshots instead of raw HTML (~50 tokens vs ~2000)
-- **Minimum round-trips** — `--inspect` flag returns updated page state with every action
-- **Zero setup** — single binary, no npm install, no runtime dependencies
+- **Minimum round-trips** — `--inspect` returns updated page state with every action
+- **Zero setup** — single binary, headless by default, no npm/Node required
 - **Persistent sessions** — login once, stay logged in across invocations
-
-aibrowsr is a ~3K line Rust binary that replaces the entire Playwright/Puppeteer stack for agent use cases.
+- **3 targeting modes** — uid from accessibility tree, CSS selectors, or coordinates
 
 ## Install
 
@@ -18,7 +17,7 @@ aibrowsr is a ~3K line Rust binary that replaces the entire Playwright/Puppeteer
 # npm (recommended — downloads prebuilt binary)
 npm install -g aibrowsr
 
-# or with npx (no install needed)
+# or with npx (no install)
 npx aibrowsr --help
 
 # or with Cargo (builds from source)
@@ -28,54 +27,68 @@ cargo install aibrowsr
 ## Quick Start
 
 ```bash
-# Navigate to a page
-aibrowsr goto https://example.com
-
-# Inspect the page (accessibility tree, token-optimized)
-aibrowsr inspect
+# Navigate and inspect the page in one call
+aibrowsr goto https://example.com --inspect
+# → https://example.com — Example Domain
 # → uid=e1 heading "Example Domain" level=1
-#   uid=e2 link "More information..." focusable
+# → uid=e2 paragraph "This domain is for..."
+# → uid=e3 link "Learn more"
 
-# Click an element by uid
-aibrowsr click e2 --inspect
+# Click by uid, get updated page state
+aibrowsr click e3 --inspect
 
 # Fill a form field
-aibrowsr fill e5 "user@test.com"
+aibrowsr fill --uid e5 "user@test.com"
+
+# Or target by CSS selector (when uids aren't practical)
+aibrowsr click --selector "button.submit"
+aibrowsr fill --selector "input[name=email]" "hello@test.com"
+
+# Extract visible text (reader mode)
+aibrowsr text
 
 # Evaluate JavaScript
 aibrowsr eval "document.title"
-# → "Example Domain"
 
-# Screenshot (returns file path)
+# Screenshot (returns file path, not binary data)
 aibrowsr screenshot
-# → ~/.aibrowsr/tmp/screenshot-1711540200.png
 ```
 
 ## How It Works
 
 ```
-aibrowsr (Rust, ~3K lines)
+aibrowsr (Rust, ~3.5K lines)
     │
-    │ WebSocket (CDP protocol)
+    │ WebSocket (Chrome DevTools Protocol)
     ▼
-Chrome / Chromium
+Chrome / Chromium (headless by default)
 ```
 
-No Node.js. No Playwright. No QuickJS sandbox. No daemon required.
+No Node.js. No Playwright. No daemon required. Headless by default — use `--headed` for debugging.
 
-aibrowsr talks Chrome DevTools Protocol directly. The a11y tree snapshot assigns a unique `uid` to each element. The agent reads the snapshot, picks a uid, sends the action. No CSS selector guessing.
+The accessibility tree snapshot assigns a unique `uid` to each element. The agent reads the snapshot, picks a uid, sends the action. When uids aren't available, CSS selectors and coordinates work as fallbacks.
 
 ## Commands
 
 | Command | Description |
 |---------|------------|
-| `goto <url>` | Navigate to URL |
-| `inspect [--verbose]` | Inspect page accessibility tree with uids |
-| `click <uid> [--inspect]` | Click element by uid |
-| `fill <uid> <value> [--inspect]` | Fill input by uid |
-| `fill-form <uid=val>... [--inspect]` | Batch fill multiple fields |
-| `eval <expression>` | Evaluate JS in page context |
-| `screenshot [--filename]` | Capture screenshot, return file path |
+| `goto <url> [--inspect]` | Navigate to URL |
+| `inspect [--verbose] [--max-depth N] [--uid eN]` | Accessibility tree with uids |
+| `click <uid> [--inspect]` | Click by uid |
+| `click --selector "css" [--inspect]` | Click by CSS selector |
+| `click --xy 100,200` | Click by coordinates |
+| `fill --uid <uid> <value> [--inspect]` | Fill input by uid |
+| `fill --selector "css" <value>` | Fill by CSS selector |
+| `fill-form <uid=val>...` | Batch fill multiple fields |
+| `text [uid]` | Extract visible text (page or element) |
+| `eval <expression>` | Run JS in page context |
+| `wait <text\|url\|selector> <pattern>` | Wait for condition |
+| `type <text> [--selector "css"]` | Type into focused/selected element |
+| `press <key>` | Press Enter, Tab, Escape, etc. |
+| `scroll <down\|up\|uid>` | Scroll page or element into view |
+| `hover <uid>` | Hover over element |
+| `back` | Navigate back in history |
+| `screenshot [--filename name]` | Capture screenshot → file path |
 | `tabs` | List open browser tabs |
 | `close` | Close managed browser |
 | `status` | Show session info |
@@ -85,43 +98,63 @@ aibrowsr talks Chrome DevTools Protocol directly. The a11y tree snapshot assigns
 
 ```
 --browser <name>         Named browser profile (default: "default")
---connect [url]          Connect to running Chrome (auto-discover or explicit)
---headed               Show browser window (default is headless)
+--page <name>            Named page/tab (default: "default")
+--connect [url]          Connect to running Chrome (auto or explicit)
+--headed                 Show browser window (default is headless)
 --timeout <seconds>      Command timeout (default: 30)
 --ignore-https-errors    Accept self-signed certificates
+--json                   Structured JSON output for all commands
 ```
 
 ## The Inspect → Act → Inspect Loop
 
-The core workflow for agents:
-
 ```bash
-# 1. Inspect to discover the page
-aibrowsr inspect
+# 1. Navigate and inspect
+aibrowsr goto https://app.com/login --inspect
 # → uid=e1 heading "Login" level=1
-#   uid=e2 textbox "Email" value="" focusable
-#   uid=e3 textbox "Password" value="" focusable
+#   uid=e2 textbox "Email" focusable
+#   uid=e3 textbox "Password" focusable
 #   uid=e4 button "Sign In" focusable
 
-# 2. Act using uids from the snapshot
-aibrowsr fill e2 "user@test.com"
-aibrowsr fill e3 "password123"
+# 2. Act
+aibrowsr fill --uid e2 "user@test.com"
+aibrowsr fill --uid e3 "password123"
 
-# 3. Click with --inspect to get updated state in one call
+# 3. Click with --inspect to get result + new state in one call
 aibrowsr click e4 --inspect
 # → Clicked uid=e4
 # → uid=e1 heading "Dashboard" level=1
-#   uid=e2 navigation "Main menu"
-#   ...
+# → uid=e2 navigation "Main menu"
 ```
 
-The `--inspect` flag eliminates one round-trip per interaction — the agent gets the action result and updated page state in a single call.
+## JSON Mode
+
+```bash
+aibrowsr --json goto https://example.com --inspect
+# → {"ok":true,"url":"...","title":"...","snapshot":"uid=e1 heading..."}
+
+aibrowsr --json eval "1+1"
+# → {"ok":true,"result":2}
+
+# Errors also structured (exit 0 for agent parsing):
+aibrowsr --json click e99
+# → {"ok":false,"error":"Element uid=e99 not found.","hint":"Run 'aibrowsr inspect'"}
+```
+
+## Multi-Tab
+
+```bash
+aibrowsr --page main goto https://app.com
+aibrowsr --page docs goto https://docs.app.com
+aibrowsr --page main eval "document.title"   # → "App"
+aibrowsr --page docs eval "document.title"   # → "Docs"
+```
 
 ## Using with AI Agents
 
-Tell your agent to run `aibrowsr --help` — the help output includes a complete LLM usage guide with examples and patterns. No plugin or skill installation needed.
+Tell your agent to run `aibrowsr --help` — the help output includes a complete LLM usage guide. No plugin needed.
 
-### Allowing in Claude Code
+### Claude Code
 
 ```json
 {
@@ -134,33 +167,20 @@ Tell your agent to run `aibrowsr --help` — the help output includes a complete
 ### Connect to Your Browser
 
 ```bash
-# Auto-discover Chrome with debugging enabled
-aibrowsr --connect snap
-
-# Or launch Chrome manually with:
-google-chrome --remote-debugging-port=9222
+aibrowsr --connect inspect    # auto-discover Chrome with debugging
+google-chrome --remote-debugging-port=9222  # or launch manually
 ```
-
-## Architecture
-
-- **CDP Client** — async WebSocket transport with request/response correlation and event subscription
-- **Browser Launcher** — auto-discover running Chrome or launch managed Chromium with persistent profiles
-- **Session Manager** — JSON file tracks browser connections, named pages, uid maps across invocations
-- **Micro-Daemon** (optional) — persistent connection, Chrome health heartbeat, crash recovery
-- **Snapshot Engine** — `Accessibility.getFullAXTree` → compact text with uid identifiers
-- **Element Resolver** — uid → `ElementRef` → `DOM.resolveNode` → CDP input dispatch with action stabilization
-- **ElementRef abstraction** — decouples uid resolution from CDP internals, ready for WebDriver BiDi
 
 ## Comparison
 
 | | aibrowsr | Playwright MCP | dev-browser v1 | chrome-devtools-mcp |
 |---|---|---|---|---|
 | Runtime deps | none | Node.js | Node.js + npm | Node.js |
-| Binary size | ~10 MB | ~200 MB | ~200 MB | ~200 MB |
+| Binary size | ~3 MB | ~200 MB | ~200 MB | ~200 MB |
 | Startup | ~10ms | ~500ms | ~500ms | ~500ms |
-| Element targeting | uid (a11y tree) | CSS selectors | CSS selectors | uid (a11y tree) |
-| Batching | --inspect flag | 1 action/call | script mode | 1 action/call |
-| Code | ~3K Rust | Playwright | 76K (69K fork) | ~12K TS |
+| Element targeting | uid + selector + xy | CSS selectors | CSS selectors | uid |
+| Action + observe | `--inspect` flag | 2 calls | 1 script | 2 calls |
+| Code | ~3.5K Rust | Playwright | 76K (69K fork) | ~12K TS |
 
 ## License
 
