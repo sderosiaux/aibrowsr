@@ -517,6 +517,19 @@ async fn run(cli: Cli) -> Result<(), BoxError> {
             (conn, client)
         }
     } else {
+        // No existing session. Only auto-launch Chrome for commands that navigate
+        // (goto, pipe). For action commands (click, extract, inspect, etc.),
+        // a missing session means the user forgot to `goto` first.
+        let needs_existing = !matches!(
+            cli.command,
+            Command::Goto { .. } | Command::Pipe
+        );
+        if needs_existing {
+            return Err(format!(
+                "No browser session '{}'. Run `aibrowsr --browser {} goto <url>` first.",
+                cli.browser, cli.browser
+            ).into());
+        }
         let opts = BrowserOptions {
             name: cli.browser.clone(),
             headless: want_headless,
