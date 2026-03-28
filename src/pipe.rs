@@ -120,6 +120,8 @@ async fn dispatch(
         "scroll" => dispatch_scroll(client, store, browser_name, page_name, cmd).await,
         "type" => dispatch_type(client, cmd).await,
         "press" => dispatch_press(client, cmd).await,
+        "fill-form" | "fill_form" | "fillform" => dispatch_fill_form(client, store, browser_name, page_name, target_id, global_max_depth, cmd).await,
+        "hover" => dispatch_hover(client, store, browser_name, page_name, cmd).await,
         "tabs" => dispatch_tabs(browser_client).await,
         "network" => dispatch_network(client, cmd).await,
         "console" => dispatch_console(client, cmd).await,
@@ -557,4 +559,50 @@ async fn connect_browser(
     let conn = browser::resolve_browser(&opts).await?;
     let client = CdpClient::connect(&conn.ws_endpoint).await?;
     Ok((conn, client))
+}
+
+async fn dispatch_fill_form(
+    client: &CdpClient,
+    store: &mut session::SessionStore,
+    browser_name: &str,
+    page_name: &str,
+    target_id: &str,
+    global_max_depth: Option<usize>,
+    cmd: &Value,
+) -> Result<Value, Box<dyn std::error::Error>> {
+    let pairs = cmd.get("pairs").and_then(Value::as_array)
+        .ok_or("fill-form requires \"pairs\" array (e.g. [{\"uid\":\"n1\",\"value\":\"a\"}])")?;
+
+    let uid_map = crate::run_helpers::get_uid_map(store, browser_name, page_name);
+    for pair in pairs {
+        let uid = pair.get("uid").and_then(Value::as_str).ok_or("Each pair needs \"uid\"")?;
+        let value = pair.get("value").and_then(Value::as_str).ok_or("Each pair needs \"value\"")?;
+        crate::element::fill(client, &uid_map, uid, value).await?;
+    }
+
+    let inspect = cmd.get("inspect").and_then(Value::as_bool).unwrap_or(false);
+    let mut obj = json!({"ok": true, "message": format!("Filled {} fields", pairs.len())});
+    if inspect {
+        let max_depth = cmd.get("max_depth").and_then(Value::as_u64).map(|v| v as usize).or(global_max_depth);
+        let snapshot = crate::commands::inspect::run(client, false, max_depth, None, None).await?;
+        obj["snapshot"] = json!(snapshot.text);
+        if let Some(browser_s) = store.browsers.get_mut(browser_name) {
+            let page = session::ensure_page(browser_s, page_name, target_id);
+            page.uid_map = snapshot.uid_map;
+        }
+    }
+    Ok(obj)
+}
+
+async fn dispatch_hover(
+    client: &CdpClient,
+    store: &session::SessionStore,
+    browser_name: &str,
+    page_name: &str,
+    cmd: &Value,
+) -> Result<Value, Box<dyn std::error::Error>> {
+    let uid = cmd.get("uid").and_then(Value::as_str).ok_or("hover requires \"uid\"")?;
+    let uid_map = crate::run_helpers::get_uid_map(store, browser_name, page_name);
+    crate::element::hover(client, &uid_map, uid).await?;
+    Ok(json!({"ok": true, "message": format!("Hovered uid={uid}")}))
 }
