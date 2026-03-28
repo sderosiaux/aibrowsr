@@ -261,16 +261,20 @@ google-chrome --remote-debugging-port=9222  # or launch manually
 
 ## Comparison
 
-| | aibrowsr | Playwright MCP | dev-browser v1 | chrome-devtools-mcp |
+| | aibrowsr | dev-browser | chrome-devtools-mcp | Playwright MCP |
 |---|---|---|---|---|
-| Runtime deps | none | Node.js | Node.js + npm | Node.js |
-| Binary size | ~3 MB | ~200 MB | ~200 MB | ~200 MB |
-| Startup | ~10ms | ~500ms | ~500ms | ~500ms |
-| Element targeting | uid + selector + xy | CSS selectors | CSS selectors | uid |
-| UID stability | backendNodeId (stable) | — | — | sequential (unstable) |
-| Action + observe | `--inspect` flag | 2 calls | 1 script | 2 calls |
-| Reader mode | `read` (Readability) | — | — | — |
-| Code | ~4K Rust | Playwright | 76K (69K fork) | ~12K TS |
+| Language | Rust | Rust + Node.js | TypeScript | TypeScript |
+| Runtime deps | none | Node.js + npm + Playwright + QuickJS | Node.js + Puppeteer | Node.js + Playwright |
+| Binary size | ~3 MB | ~3 MB (CLI) + ~200 MB (daemon + deps) | npm package | npm package |
+| CLI startup (reuse session) | ~10ms | ~500ms (daemon check) | N/A (MCP server) | N/A (MCP server) |
+| Element targeting | uid + CSS selector + coordinates | CSS selectors + snapshotForAI | uid (sequential) | CSS selectors |
+| UID stability | backendNodeId (stable across inspects) | N/A | sequential (reassigned each snapshot) | N/A |
+| Action + observe | `--inspect` flag (1 call) | 1 script (batched) | 1 MCP call per action | 1 MCP call per action |
+| Script batching | Tier 1 only (v2.1 planned) | Full JS scripts | No | No |
+| Stealth mode | 7 CDP patches + Runtime.enable skip | No | No | No |
+| Reader mode | `read` (Mozilla Readability) | No | No | No |
+| Sandbox | Chrome sandbox | QuickJS WASM sandbox | Chrome sandbox | No |
+| Code | ~4K lines | ~76K lines (69K Playwright fork) | ~12K lines | Playwright |
 
 ## License
 
