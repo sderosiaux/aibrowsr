@@ -83,6 +83,9 @@ enum Command {
         /// Inspect page after navigation
         #[arg(long)]
         inspect: bool,
+        /// Max depth for inspect output (also accepted as global flag)
+        #[arg(long)]
+        max_depth: Option<usize>,
     },
 
     /// Click an element by uid, CSS selector, or coordinates
@@ -98,6 +101,9 @@ enum Command {
         /// Inspect page after clicking
         #[arg(long)]
         inspect: bool,
+        /// Max depth for inspect output (also accepted as global flag)
+        #[arg(long)]
+        max_depth: Option<usize>,
     },
 
     /// Fill an input element by uid or CSS selector
@@ -113,6 +119,9 @@ enum Command {
         /// Inspect page after filling
         #[arg(long)]
         inspect: bool,
+        /// Max depth for inspect output (also accepted as global flag)
+        #[arg(long)]
+        max_depth: Option<usize>,
     },
 
     /// Fill multiple form fields at once
@@ -123,6 +132,9 @@ enum Command {
         /// Inspect page after filling
         #[arg(long)]
         inspect: bool,
+        /// Max depth for inspect output (also accepted as global flag)
+        #[arg(long)]
+        max_depth: Option<usize>,
     },
 
     /// Extract visible text from the page or an element
@@ -423,12 +435,14 @@ async fn run(cli: Cli) -> Result<(), Box<dyn std::error::Error>> {
     // Execute command
     let json_mode = cli.json;
     match cli.command {
-        Command::Goto { url, inspect } => {
+        Command::Goto { url, inspect, max_depth } => {
+            let depth = max_depth.or(cli.max_depth);
             let result = commands::goto::run(&client, &url, cli.timeout).await?;
-            output_goto(&client, &mut store, &cli.browser, &cli.page, &target_id, &result.url, &result.title, inspect, cli.max_depth, json_mode).await?;
+            output_goto(&client, &mut store, &cli.browser, &cli.page, &target_id, &result.url, &result.title, inspect, depth, json_mode).await?;
         }
 
-        Command::Click { uid, selector, xy, inspect } => {
+        Command::Click { uid, selector, xy, inspect, max_depth } => {
+            let depth = max_depth.or(cli.max_depth);
             let provided = u8::from(uid.is_some()) + u8::from(selector.is_some()) + u8::from(xy.is_some());
             if provided == 0 {
                 return Err("Provide a uid, --selector, or --xy to identify the click target.".into());
@@ -452,10 +466,11 @@ async fn run(cli: Cli) -> Result<(), Box<dyn std::error::Error>> {
                 commands::click::run(&client, &uid_map, uid).await?
             };
 
-            output_action(&client, &mut store, &cli.browser, &cli.page, &target_id, msg, inspect, cli.max_depth, json_mode).await?;
+            output_action(&client, &mut store, &cli.browser, &cli.page, &target_id, msg, inspect, depth, json_mode).await?;
         }
 
-        Command::Fill { uid, selector, value, inspect } => {
+        Command::Fill { uid, selector, value, inspect, max_depth } => {
+            let depth = max_depth.or(cli.max_depth);
             let provided = u8::from(uid.is_some()) + u8::from(selector.is_some());
             if provided == 0 {
                 return Err("Provide --uid or --selector to identify the element.".into());
@@ -473,10 +488,11 @@ async fn run(cli: Cli) -> Result<(), Box<dyn std::error::Error>> {
                 commands::fill::run(&client, &uid_map, uid, &value).await?
             };
 
-            output_action(&client, &mut store, &cli.browser, &cli.page, &target_id, msg, inspect, cli.max_depth, json_mode).await?;
+            output_action(&client, &mut store, &cli.browser, &cli.page, &target_id, msg, inspect, depth, json_mode).await?;
         }
 
-        Command::FillForm { pairs, inspect } => {
+        Command::FillForm { pairs, inspect, max_depth } => {
+            let depth = max_depth.or(cli.max_depth);
             let uid_map = get_uid_map(&store, &cli.browser, &cli.page);
             let parsed: Result<Vec<(&str, &str)>, _> = pairs
                 .iter()
@@ -489,7 +505,7 @@ async fn run(cli: Cli) -> Result<(), Box<dyn std::error::Error>> {
 
             let msg = commands::fill::run_form(&client, &uid_map, &parsed).await?;
 
-            output_action(&client, &mut store, &cli.browser, &cli.page, &target_id, msg, inspect, cli.max_depth, json_mode).await?;
+            output_action(&client, &mut store, &cli.browser, &cli.page, &target_id, msg, inspect, depth, json_mode).await?;
         }
 
         Command::Text { uid, selector, truncate } => {
