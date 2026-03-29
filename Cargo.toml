@@ -1,10 +1,10 @@
 [package]
-name = "aibrowsr"
+name = "chrome-agent"
 version = "0.3.0"
 edition = "2024"
 description = "Browser automation for AI agents. Single binary, zero deps, CDP direct to Chrome."
 license = "MIT"
-repository = "https://github.com/sderosiaux/aibrowsr"
+repository = "https://github.com/sderosiaux/chrome-agent"
 keywords = ["browser", "automation", "chrome", "cdp", "ai-agent"]
 categories = ["command-line-utilities", "web-programming"]
 readme = "README.md"

@@ -156,23 +156,23 @@ pub fn json_output(value: &serde_json::Value) {
 /// Provide a contextual hint for common errors.
 pub fn error_hint(msg: &str) -> Option<&'static str> {
     if msg.contains("Connection refused") || msg.contains("No such file") {
-        Some("Is Chrome running? Try: aibrowsr goto <url>")
+        Some("Is Chrome running? Try: chrome-agent goto <url>")
     } else if msg.contains("uid=") && msg.contains("not found") {
-        Some("Run `aibrowsr inspect` to refresh element uids")
+        Some("Run `chrome-agent inspect` to refresh element uids")
     } else if msg.contains("Navigation failed") {
         Some("Check the URL is valid and the page is reachable")
     } else if msg.contains("No snapshot") || msg.contains("No inspect") || msg.contains("uid_map is empty") {
-        Some("Run 'aibrowsr inspect' first")
+        Some("Run 'chrome-agent inspect' first")
     } else if msg.contains("Timeout") || msg.contains("timeout") {
         Some("Use --timeout N for slow pages")
     } else if msg.contains("not interactable") || msg.contains("no visible box model") {
-        Some("Element may be hidden. Try: aibrowsr scroll <uid>")
+        Some("Element may be hidden. Try: chrome-agent scroll <uid>")
     } else if msg.contains("No element matches selector") {
-        Some("CSS selector didn't match. Check with: aibrowsr eval \"document.querySelector('...')\"")
+        Some("CSS selector didn't match. Check with: chrome-agent eval \"document.querySelector('...')\"")
     } else if msg.contains("backendDomNodeId") || msg.contains("response parse") {
-        Some("Page structure issue. Try: aibrowsr click --selector or aibrowsr eval")
+        Some("Page structure issue. Try: chrome-agent click --selector or chrome-agent eval")
     } else if msg.contains("may not have an article") || msg.contains("Readability") {
-        Some("Page has no article structure. Try: aibrowsr text or aibrowsr text --selector \"main\"")
+        Some("Page has no article structure. Try: chrome-agent text or chrome-agent text --selector \"main\"")
     } else if msg.contains("Provide a uid") || msg.contains("Provide --uid") {
         Some("Specify what to target: uid (e.g. n47), --selector \"css\", or --xy x,y")
     } else if msg.contains("Evaluation error") || msg.contains("TypeError") || msg.contains("ReferenceError") || msg.contains("SyntaxError") {
@@ -371,7 +371,7 @@ pub fn cmd_close(browser_name: &str, purge: bool, json_mode: bool) -> Result<(),
     // Purge browser profile if requested
     if purge
         && let Some(home) = dirs::home_dir() {
-            let profile_dir = home.join(".aibrowsr").join("browsers").join(browser_name);
+            let profile_dir = home.join(".chrome-agent").join("browsers").join(browser_name);
             if profile_dir.exists() {
                 // Wait briefly for Chrome to exit after kill, then retry purge
                 for _ in 0..5 {

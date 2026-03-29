@@ -544,7 +544,7 @@ async fn dispatch_scroll(
         uid => {
             let uid_map = get_uid_map(store, browser_name, page_name);
             let element_ref = uid_map.get(uid).ok_or_else(|| {
-                format!("Element uid={uid} not found. Run 'aibrowsr inspect' to get fresh uids.")
+                format!("Element uid={uid} not found. Run 'chrome-agent inspect' to get fresh uids.")
             })?;
             let backend_node_id = element_ref.backend_node_id().ok_or_else(|| {
                 format!("Element uid={uid} has no resolvable backend node.")
@@ -555,7 +555,7 @@ async fn dispatch_scroll(
                     crate::cdp::types::ResolveNodeParams {
                         node_id: None,
                         backend_node_id: Some(backend_node_id),
-                        object_group: Some("aibrowsr".into()),
+                        object_group: Some("chrome-agent".into()),
                         execution_context_id: None,
                     },
                 )

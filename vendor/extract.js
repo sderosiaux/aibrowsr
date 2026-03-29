@@ -1,4 +1,4 @@
-// aibrowsr extract algorithm
+// chrome-agent extract algorithm
 // Detects repeating data records in a page using MDR/DEPTA-inspired heuristics.
 // Called with: extract(_scope, _limit) where _scope is document or a scoped element.
 // Returns JSON string: { items, count, pattern } or { items: [], hint: "..." }

@@ -226,7 +226,7 @@ async fn resolve_http_endpoint(endpoint: &str) -> Result<BrowserConnection, Brow
     let ws = fetch_ws_endpoint(endpoint).await.map_err(|_| {
         BrowserError::NotFound(format!(
             "Could not resolve CDP WebSocket from {endpoint}. \
-             If Chrome uses built-in remote debugging, run `aibrowsr --connect` \
+             If Chrome uses built-in remote debugging, run `chrome-agent --connect` \
              without a URL for auto-discovery."
         ))
     })?;
@@ -391,7 +391,7 @@ fn find_chromium() -> Result<PathBuf, BrowserError> {
     // 1. Check for managed Chromium
     if let Some(home) = dirs::home_dir() {
         let managed = home
-            .join(".aibrowsr")
+            .join(".chrome-agent")
             .join("chromium");
 
         if cfg!(target_os = "macos") {
@@ -520,7 +520,7 @@ fn browser_profile_dir(name: &str) -> Result<PathBuf, BrowserError> {
     let home = dirs::home_dir().ok_or_else(|| {
         BrowserError::Launch("Could not determine home directory".into())
     })?;
-    Ok(home.join(".aibrowsr").join("browsers").join(name).join("chromium-profile"))
+    Ok(home.join(".chrome-agent").join("browsers").join(name).join("chromium-profile"))
 }
 
 fn auto_connect_error_message() -> String {
@@ -580,7 +580,7 @@ mod tests {
 
     #[test]
     fn read_devtools_active_port_parses_correctly() {
-        let dir = std::env::temp_dir().join("aibrowsr_test_devtools");
+        let dir = std::env::temp_dir().join("chrome-agent_test_devtools");
         std::fs::create_dir_all(&dir).unwrap();
         let path = dir.join("DevToolsActivePort");
         std::fs::write(&path, "9222\n/devtools/browser/abc-123\n").unwrap();
@@ -594,7 +594,7 @@ mod tests {
 
     #[test]
     fn read_devtools_active_port_rejects_invalid() {
-        let dir = std::env::temp_dir().join("aibrowsr_test_devtools_bad");
+        let dir = std::env::temp_dir().join("chrome-agent_test_devtools_bad");
         std::fs::create_dir_all(&dir).unwrap();
         let path = dir.join("DevToolsActivePort");
         std::fs::write(&path, "not_a_number\n").unwrap();

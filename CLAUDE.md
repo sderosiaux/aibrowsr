@@ -1,4 +1,4 @@
-# aibrowsr v0.2.5
+# chrome-agent v0.2.5
 
 Single Rust binary for browser automation via CDP. Built for AI agents.
 ~6.2K lines Rust, zero runtime dependencies, 2.9 MB binary.
@@ -17,7 +17,7 @@ CLI (clap) → CDP Client (WebSocket) → Chrome
 | `src/element_ref.rs` | ElementRef abstraction (decouples from CDP internals) |
 | `src/snapshot.rs` | Accessibility tree → compact text with stable uids (backendNodeId), role filter + aliases |
 | `src/truncate.rs` | UTF-8 safe string truncation (prevents panics on multi-byte chars) |
-| `src/session.rs` | JSON session persistence (~/.aibrowsr/sessions.json, 0600 perms, conflict detection) |
+| `src/session.rs` | JSON session persistence (~/.chrome-agent/sessions.json, 0600 perms, conflict detection) |
 | `src/browser.rs` | Chrome launch, auto-discovery, stale DevToolsActivePort cleanup, profile management |
 | `src/pipe.rs` | Pipe mode: persistent connection, JSON stdin/stdout, 25 command dispatchers |
 | `src/setup.rs` | 7 stealth patches (shared by main.rs + pipe.rs) |
@@ -26,7 +26,7 @@ CLI (clap) → CDP Client (WebSocket) → Chrome
 | `vendor/Readability.js` | Mozilla Readability (90KB, MIT) embedded via include_str! |
 | `vendor/extract.js` | MDR/DEPTA-inspired data record extraction (standalone, tested via jsdom) |
 | `npm/` | npm distribution wrapper (postinstall downloads native binary) |
-| `skills/aibrowsr/SKILL.md` | Agent skill file — `npx skills add sderosiaux/aibrowsr` |
+| `skills/chrome-agent/SKILL.md` | Agent skill file — `npx skills add sderosiaux/chrome-agent` |
 
 ## Build & Test
 
@@ -60,7 +60,7 @@ cargo clippy -- -D warnings  # zero warnings enforced in CI
 - **Reader mode** — `read` injects Mozilla Readability.js for article extraction (~500 tokens vs ~15K)
 - **Content extraction hierarchy** — `read` (articles) > `extract` (repeating data) > `text --selector` (scoped) > `text` (full page) > `eval` (structured JS) > `network` (API responses)
 - **`extract` command** — MDR/DEPTA-inspired heuristics: sibling structural similarity, content heterogeneity, text-to-link ratio, semantic class fast-pass, hidden element exclusion, tag-based merge for modifier classes. 187 tests (117 JS unit via jsdom + 70 Rust E2E).
-- **Pipe mode** — `aibrowsr pipe` reads JSON from stdin, writes JSON to stdout. One connection, 10x faster.
+- **Pipe mode** — `chrome-agent pipe` reads JSON from stdin, writes JSON to stdout. One connection, 10x faster.
 - **Network capture** — retroactive via Performance API (stealth-safe) or live via Network domain
 - **Console capture** — stealth-safe interceptor via addScriptToEvaluateOnNewDocument
 - **Command aliases** — navigate/open/go, snap/snapshot/tree, js/execute, capture, tap
@@ -84,7 +84,7 @@ cargo clippy -- -D warnings  # zero warnings enforced in CI
 - `Runtime.evaluate` works WITHOUT `Runtime.enable`. Stealth mode skips it to avoid detection.
 - `history.back()` in pipe mode kills WebSocket. Use `Page.navigateToHistoryEntry` instead.
 - Parallel agents sharing `--browser default` corrupt each other's sessions. Use `--browser <unique>`.
-- Console interceptor is guarded against re-injection (`__aibrowsr_console_installed`).
+- Console interceptor is guarded against re-injection (`__chrome-agent_console_installed`).
 - `press Enter` needs `windowsVirtualKeyCode: 13` + `text: "\r"` for form submission.
 
 ## Linting

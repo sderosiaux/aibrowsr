@@ -11,14 +11,14 @@ const projectRoot = join(__dirname, '..');
 const binDir = join(projectRoot, 'bin');
 const packageJson = JSON.parse(readFileSync(join(projectRoot, 'package.json'), 'utf8'));
 const version = packageJson.version;
-const repoSlug = 'sderosiaux/aibrowsr';
+const repoSlug = 'sderosiaux/chrome-agent';
 
 const supportedTargets = Object.freeze({
-  'darwin-arm64': 'aibrowsr-darwin-arm64',
-  'darwin-x64': 'aibrowsr-darwin-x64',
-  'linux-arm64': 'aibrowsr-linux-arm64',
-  'linux-x64': 'aibrowsr-linux-x64',
-  'win32-x64': 'aibrowsr-windows-x64.exe',
+  'darwin-arm64': 'chrome-agent-darwin-arm64',
+  'darwin-x64': 'chrome-agent-darwin-x64',
+  'linux-arm64': 'chrome-agent-linux-arm64',
+  'linux-x64': 'chrome-agent-linux-x64',
+  'win32-x64': 'chrome-agent-windows-x64.exe',
 });
 
 function getTargetKey() {
@@ -37,7 +37,7 @@ async function downloadFile(url, destination) {
   return new Promise((resolve, reject) => {
     const request = (currentUrl, redirects = 10) => {
       get(currentUrl, {
-        headers: { Accept: 'application/octet-stream', 'User-Agent': `aibrowsr/${version}` },
+        headers: { Accept: 'application/octet-stream', 'User-Agent': `chrome-agent/${version}` },
       }, (response) => {
         if (response.statusCode >= 300 && response.statusCode < 400 && response.headers.location) {
           response.resume();
@@ -82,19 +82,19 @@ async function main() {
 
   if (existsSync(binaryPath)) {
     if (platform() !== 'win32') chmodSync(binaryPath, 0o755);
-    console.log(`aibrowsr: native binary already present (${binaryName})`);
+    console.log(`chrome-agent: native binary already present (${binaryName})`);
     return;
   }
 
   const url = `https://github.com/${repoSlug}/releases/download/v${version}/${binaryName}`;
-  console.log(`aibrowsr: downloading native binary for ${platform()}-${arch()}...`);
+  console.log(`chrome-agent: downloading native binary for ${platform()}-${arch()}...`);
 
   await downloadFile(url, binaryPath);
   if (platform() !== 'win32') chmodSync(binaryPath, 0o755);
-  console.log(`aibrowsr: installed ${binaryName}`);
+  console.log(`chrome-agent: installed ${binaryName}`);
 }
 
 main().catch((error) => {
-  console.error(`aibrowsr postinstall failed: ${error.message}`);
+  console.error(`chrome-agent postinstall failed: ${error.message}`);
   process.exitCode = 1;
 });

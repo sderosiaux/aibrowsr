@@ -9,16 +9,16 @@ fn binary() -> String {
         .parent()
         .unwrap()
         .to_path_buf();
-    path.push("aibrowsr");
+    path.push("chrome-agent");
     path.to_string_lossy().into_owned()
 }
 
-/// Run aibrowsr with args and return (stdout, stderr, `exit_code`).
+/// Run chrome-agent with args and return (stdout, stderr, `exit_code`).
 fn run_cli(args: &[&str]) -> (String, String, i32) {
     let output = Command::new(binary())
         .args(args)
         .output()
-        .expect("Failed to run aibrowsr");
+        .expect("Failed to run chrome-agent");
 
     let stdout = String::from_utf8_lossy(&output.stdout).to_string();
     let stderr = String::from_utf8_lossy(&output.stderr).to_string();
@@ -75,7 +75,7 @@ fn help_shows_global_flags() {
 fn version_flag() {
     let (stdout, _, code) = run_cli(&["--version"]);
     assert_eq!(code, 0);
-    assert!(stdout.contains("aibrowsr"));
+    assert!(stdout.contains("chrome-agent"));
 }
 
 #[test]
@@ -271,7 +271,7 @@ fn headed_screenshot_returns_path() {
 
     if code == 0 {
         assert!(
-            stdout.contains(".png") && stdout.contains(".aibrowsr/tmp/"),
+            stdout.contains(".png") && stdout.contains(".chrome-agent/tmp/"),
             "screenshot should return a file path: {stdout}"
         );
         // Verify file exists

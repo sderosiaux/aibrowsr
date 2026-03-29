@@ -33,7 +33,7 @@ pub async fn run(
                 const doc = document.cloneNode(true);
                 const reader = new Readability(doc);
                 const article = reader.parse();
-                if (!article) return JSON.stringify({{__error: "Readability returned null — page may not have article structure. Try: aibrowsr text --selector main"}});
+                if (!article) return JSON.stringify({{__error: "Readability returned null — page may not have article structure. Try: chrome-agent text --selector main"}});
                 return JSON.stringify({{
                     title: article.title || '',
                     textContent: article.textContent || '',
@@ -42,7 +42,7 @@ pub async fn run(
                     byline: article.byline || '',
                 }});
             }} catch(e) {{
-                return JSON.stringify({{__error: "Readability failed: " + e.message + ". Try: aibrowsr text --selector main"}});
+                return JSON.stringify({{__error: "Readability failed: " + e.message + ". Try: chrome-agent text --selector main"}});
             }}
         }})()"#
     );
@@ -71,7 +71,7 @@ pub async fn run(
         .value
         .as_ref()
         .and_then(|v| v.as_str())
-        .ok_or("Readability returned null — page may not have an article structure. Try: aibrowsr text --selector main")?;
+        .ok_or("Readability returned null — page may not have an article structure. Try: chrome-agent text --selector main")?;
 
     // Check for in-JS error return
     let raw_value: serde_json::Value = serde_json::from_str(raw)?;
@@ -96,7 +96,7 @@ pub async fn run(
 
     // Warn when Readability extracted very little — page likely isn't an article
     if parsed.text_content.len() < 200 {
-        return Err("Page has minimal readable content — likely not an article. Try: aibrowsr text --selector main".into());
+        return Err("Page has minimal readable content — likely not an article. Try: chrome-agent text --selector main".into());
     }
 
     Ok(parsed)

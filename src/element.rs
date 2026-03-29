@@ -17,7 +17,7 @@ async fn resolve_uid(
 ) -> Result<ResolvedElement, ElementError> {
     let element_ref = uid_map.get(uid).ok_or_else(|| {
         ElementError::NotFound(format!(
-            "Element uid={uid} not found. Run 'aibrowsr inspect' to get fresh uids."
+            "Element uid={uid} not found. Run 'chrome-agent inspect' to get fresh uids."
         ))
     })?;
 
@@ -40,7 +40,7 @@ async fn resolve_uid(
         .map_err(|e| {
             ElementError::Detached(format!(
                 "Element uid={uid} no longer exists. The page may have changed. \
-                 Run 'aibrowsr inspect' to get fresh uids. ({e})"
+                 Run 'chrome-agent inspect' to get fresh uids. ({e})"
             ))
         })?;
 

@@ -1,5 +1,5 @@
 ---
-name: aibrowsr
+name: chrome-agent
 description: Browser automation for AI agents. Use when the user asks to interact with websites, scrape data, fill forms, take screenshots, or automate any browser task. Triggers on "open a website", "go to", "scrape", "fill the form", "click", "take a screenshot", "read this page", "search on", "check this site".
 metadata:
   author: sderosiaux
@@ -7,19 +7,19 @@ metadata:
   tags: ["browser", "automation", "scraping", "chrome", "cdp"]
 ---
 
-# aibrowsr — Browser Automation
+# chrome-agent — Browser Automation
 
-Use `aibrowsr` to control Chrome for the user. Single binary, zero dependencies, headless by default.
+Use `chrome-agent` to control Chrome for the user. Single binary, zero dependencies, headless by default.
 
 ## Install Check
 
 ```bash
-which aibrowsr || npm install -g aibrowsr
+which chrome-agent || npm install -g chrome-agent
 ```
 
 If install fails (no prebuilt binary), build from source:
 ```bash
-cargo install aibrowsr
+cargo install chrome-agent
 ```
 
 ## Core Workflow
@@ -28,37 +28,37 @@ cargo install aibrowsr
 
 ```bash
 # Navigate and see the page
-aibrowsr goto https://example.com --inspect
+chrome-agent goto https://example.com --inspect
 
 # Click by uid from the inspect output
-aibrowsr click n12 --inspect
+chrome-agent click n12 --inspect
 
 # Fill a form field
-aibrowsr fill --uid n20 "value"
+chrome-agent fill --uid n20 "value"
 
 # Or use CSS selectors when uids aren't practical
-aibrowsr click --selector "button.submit"
-aibrowsr fill --selector "input[name=email]" "hello@test.com"
+chrome-agent click --selector "button.submit"
+chrome-agent fill --selector "input[name=email]" "hello@test.com"
 ```
 
 ## Content Extraction (choose the right tool)
 
 | Tool | When | Tokens |
 |------|------|--------|
-| `aibrowsr read` | Articles, blog posts, product pages | ~200-500 |
-| `aibrowsr extract` | Repeating data: product grids, news feeds, tables, search results | ~100-500 |
-| `aibrowsr text --selector "main"` | Scoped visible text | ~500-1000 |
-| `aibrowsr eval "JSON.stringify(...)"` | Structured data from DOM | Varies |
-| `aibrowsr inspect --filter "link"` | Find interactive elements | ~50-200 |
-| `aibrowsr text` | Full page text (last resort) | ~5000+ |
+| `chrome-agent read` | Articles, blog posts, product pages | ~200-500 |
+| `chrome-agent extract` | Repeating data: product grids, news feeds, tables, search results | ~100-500 |
+| `chrome-agent text --selector "main"` | Scoped visible text | ~500-1000 |
+| `chrome-agent eval "JSON.stringify(...)"` | Structured data from DOM | Varies |
+| `chrome-agent inspect --filter "link"` | Find interactive elements | ~50-200 |
+| `chrome-agent text` | Full page text (last resort) | ~5000+ |
 
 ## Bot Protection
 
 | Site protection | Solution |
 |---|---|
-| None | `aibrowsr goto ...` |
-| Cloudflare/Turnstile | `aibrowsr --stealth goto ...` |
-| Logged-in sites (X, Gmail, etc.) | `aibrowsr --stealth --copy-cookies goto ...` |
+| None | `chrome-agent goto ...` |
+| Cloudflare/Turnstile | `chrome-agent --stealth goto ...` |
+| Logged-in sites (X, Gmail, etc.) | `chrome-agent --stealth --copy-cookies goto ...` |
 | DataDome/Kasada (Leboncoin, etc.) | Connect to real Chrome: see below |
 
 For heavy protection:
@@ -66,54 +66,54 @@ For heavy protection:
 # User must launch Chrome with debugging:
 google-chrome --remote-debugging-port=9222 &
 # Then connect:
-aibrowsr --connect http://127.0.0.1:9222 goto https://protected-site.com --inspect
+chrome-agent --connect http://127.0.0.1:9222 goto https://protected-site.com --inspect
 ```
 
 ## Key Commands
 
 ```bash
 # Navigation
-aibrowsr goto <url> [--inspect] [--wait-for "selector"]
-aibrowsr back
-aibrowsr scroll down|up|<uid>
+chrome-agent goto <url> [--inspect] [--wait-for "selector"]
+chrome-agent back
+chrome-agent scroll down|up|<uid>
 
 # Inspection
-aibrowsr inspect [--max-depth N] [--filter "button,link"] [--uid nN]
-aibrowsr inspect --filter "article" --scroll --limit 50  # collect from infinite scroll (X.com, etc.)
+chrome-agent inspect [--max-depth N] [--filter "button,link"] [--uid nN]
+chrome-agent inspect --filter "article" --scroll --limit 50  # collect from infinite scroll (X.com, etc.)
 
 # Actions (3 targeting modes: uid, --selector, --xy)
-aibrowsr click <uid> [--inspect]
-aibrowsr click --selector "css" [--inspect]
-aibrowsr click --xy 100,200
-aibrowsr fill --uid <uid> <value>
-aibrowsr fill --selector "css" <value>
-aibrowsr fill-form n20="a@b.com" n30="password"
-aibrowsr type "text" [--selector "input.search"]
-aibrowsr press Enter|Tab|Escape
+chrome-agent click <uid> [--inspect]
+chrome-agent click --selector "css" [--inspect]
+chrome-agent click --xy 100,200
+chrome-agent fill --uid <uid> <value>
+chrome-agent fill --selector "css" <value>
+chrome-agent fill-form n20="a@b.com" n30="password"
+chrome-agent type "text" [--selector "input.search"]
+chrome-agent press Enter|Tab|Escape
 
 # Content extraction
-aibrowsr read [--truncate N]
-aibrowsr extract [--selector "css"] [--limit N]   # auto-detect repeating data (no selectors needed)
-aibrowsr extract --scroll                         # scroll first for lazy-loaded pages (YouTube, Pinterest)
-aibrowsr extract --a11y --scroll --limit 20       # React SPAs (X.com) -- uses a11y tree, not DOM
-aibrowsr text [--selector "main"] [--truncate N]
-aibrowsr eval "expression" [--selector "css"]
+chrome-agent read [--truncate N]
+chrome-agent extract [--selector "css"] [--limit N]   # auto-detect repeating data (no selectors needed)
+chrome-agent extract --scroll                         # scroll first for lazy-loaded pages (YouTube, Pinterest)
+chrome-agent extract --a11y --scroll --limit 20       # React SPAs (X.com) -- uses a11y tree, not DOM
+chrome-agent text [--selector "main"] [--truncate N]
+chrome-agent eval "expression" [--selector "css"]
 
 # Network capture ("Readability for APIs" — extract API data, not DOM)
-aibrowsr network [--filter "pattern"] [--body] [--limit N]  # already-loaded (stealth-safe)
-aibrowsr network --live 5 --body --filter "graphql"          # capture live traffic
+chrome-agent network [--filter "pattern"] [--body] [--limit N]  # already-loaded (stealth-safe)
+chrome-agent network --live 5 --body --filter "graphql"          # capture live traffic
 
 # Console + JS errors (stealth-safe)
-aibrowsr console [--level error] [--clear]
+chrome-agent console [--level error] [--clear]
 
 # Pipe mode (persistent connection, 10x faster for multi-step workflows)
-echo '{"cmd":"goto","url":"...","inspect":true}' | aibrowsr pipe
+echo '{"cmd":"goto","url":"...","inspect":true}' | chrome-agent pipe
 
 # Other
-aibrowsr screenshot [--filename name]
-aibrowsr wait text|url|selector "pattern" [--timeout N]
-aibrowsr tabs
-aibrowsr close [--purge]
+chrome-agent screenshot [--filename name]
+chrome-agent wait text|url|selector "pattern" [--timeout N]
+chrome-agent tabs
+chrome-agent close [--purge]
 ```
 
 ## Global Flags

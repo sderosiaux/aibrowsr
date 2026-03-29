@@ -1,25 +1,25 @@
-# aibrowsr
+# chrome-agent
 
-[![Crates.io](https://img.shields.io/crates/v/aibrowsr)](https://crates.io/crates/aibrowsr)
-[![npm](https://img.shields.io/npm/v/aibrowsr)](https://www.npmjs.com/package/aibrowsr)
-[![CI](https://github.com/sderosiaux/aibrowsr/actions/workflows/ci.yml/badge.svg)](https://github.com/sderosiaux/aibrowsr/actions/workflows/ci.yml)
+[![Crates.io](https://img.shields.io/crates/v/chrome-agent)](https://crates.io/crates/chrome-agent)
+[![npm](https://img.shields.io/npm/v/chrome-agent)](https://www.npmjs.com/package/chrome-agent)
+[![CI](https://github.com/sderosiaux/chrome-agent/actions/workflows/ci.yml/badge.svg)](https://github.com/sderosiaux/chrome-agent/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Rust 2024](https://img.shields.io/badge/Rust-2024_edition-orange)](https://doc.rust-lang.org/edition-guide/rust-2024/)
 
 <p align="center">
-  <img src="docs/hero.png" alt="aibrowsr — AI agent looking through a browser's accessibility tree" width="700">
+  <img src="docs/hero.png" alt="chrome-agent — AI agent looking through a browser's accessibility tree" width="700">
 </p>
 
 **Browser automation that speaks LLM.**
 
 > You're not the user. Your LLM is.
 >
-> You don't need to read this README. Your agent does. Install it, run `aibrowsr --help`, and let the LLM figure it out. The CLI embeds its own usage guide, every error comes with a hint for the next action, and `--json` mode outputs structured data an agent can parse without you writing a single adapter. This page is here because GitHub expects one.
+> You don't need to read this README. Your agent does. Install it, run `chrome-agent --help`, and let the LLM figure it out. The CLI embeds its own usage guide, every error comes with a hint for the next action, and `--json` mode outputs structured data an agent can parse without you writing a single adapter. This page is here because GitHub expects one.
 
-Playwright returns 2,000 tokens of raw HTML. aibrowsr returns 50 tokens of accessibility tree with stable element IDs. No CSS selectors to write, no DOM to parse.
+Playwright returns 2,000 tokens of raw HTML. chrome-agent returns 50 tokens of accessibility tree with stable element IDs. No CSS selectors to write, no DOM to parse.
 
 ```bash
-aibrowsr goto news.ycombinator.com --inspect
+chrome-agent goto news.ycombinator.com --inspect
 
 # ~50 tokens instead of ~2,000:
 uid=n1 RootWebArea "Hacker News"
@@ -29,13 +29,13 @@ uid=n1 RootWebArea "Hacker News"
   ...
 
 # Click + see the new page in one call:
-aibrowsr click n82 --inspect
+chrome-agent click n82 --inspect
 ```
 
 UIDs are based on Chrome's `backendNodeId`. They don't change between inspects. Click `n82` now or five minutes from now.
 
 ```
-aibrowsr (3 MB Rust binary)
+chrome-agent (3 MB Rust binary)
     | CDP over WebSocket
     v
 Chrome (headless, no Node.js, no runtime)
@@ -43,12 +43,12 @@ Chrome (headless, no Node.js, no runtime)
 
 ### Why this exists
 
-| If you've hit this... | aibrowsr does this instead |
+| If you've hit this... | chrome-agent does this instead |
 |---|---|
 | Playwright snapshots burn 2K tokens | a11y tree: ~50 tokens. 40x less context spent on page state. |
 | CSS selectors break after every deploy | UIDs from Chrome's `backendNodeId`. Stable as long as the DOM node exists. |
 | Click then inspect = 2 round-trips | `--inspect` on any command. One call, action + observation. |
-| 200MB of Node + npm + Playwright | 3 MB binary. `npx aibrowsr` works out of the box. |
+| 200MB of Node + npm + Playwright | 3 MB binary. `npx chrome-agent` works out of the box. |
 | Cloudflare blocks your headless Chrome | 7 CDP patches. `Runtime.enable` never called (the detection vector nobody talks about). |
 | Writing per-site scraping selectors | `read` for articles, `extract` for lists/tables/cards, `network` for API payloads. No selectors. |
 | Errors are stack traces | `{"ok":false, "error":"...", "hint":"run inspect"}` -- parseable, actionable. |
@@ -61,41 +61,41 @@ Chrome (headless, no Node.js, no runtime)
 
 ```bash
 # For AI agents -- installs a SKILL.md your agent reads automatically
-npx skills add sderosiaux/aibrowsr
+npx skills add sderosiaux/chrome-agent
 
 # Or just the binary
-npm install -g aibrowsr    # prebuilt
-npx aibrowsr --help        # no install
-cargo install aibrowsr     # from source
+npm install -g chrome-agent    # prebuilt
+npx chrome-agent --help        # no install
+cargo install chrome-agent     # from source
 ```
 
 ## Quick start
 
 ```bash
 # Navigate and see the page
-aibrowsr goto https://example.com --inspect
+chrome-agent goto https://example.com --inspect
 
 # Click by uid
-aibrowsr click n12 --inspect
+chrome-agent click n12 --inspect
 
 # Fill a form
-aibrowsr fill --uid n20 "user@test.com"
+chrome-agent fill --uid n20 "user@test.com"
 
 # CSS selectors work too
-aibrowsr click --selector "button.submit"
-aibrowsr fill --selector "input[name=email]" "hello@test.com"
+chrome-agent click --selector "button.submit"
+chrome-agent fill --selector "input[name=email]" "hello@test.com"
 
 # Article content (Readability -- like Firefox Reader Mode)
-aibrowsr read
+chrome-agent read
 
 # Visible text, scoped and capped
-aibrowsr text --selector "main" --truncate 500
+chrome-agent text --selector "main" --truncate 500
 
 # Run JS
-aibrowsr eval "document.title"
+chrome-agent eval "document.title"
 
 # Screenshot (returns a file path, not binary)
-aibrowsr screenshot
+chrome-agent screenshot
 ```
 
 ## Commands
@@ -148,14 +148,14 @@ aibrowsr screenshot
 ## The loop: inspect, act, inspect
 
 ```bash
-aibrowsr goto https://app.com/login --inspect
+chrome-agent goto https://app.com/login --inspect
 # uid=n52 textbox "Email" focusable
 # uid=n58 textbox "Password" focusable
 # uid=n63 button "Sign In" focusable
 
-aibrowsr fill --uid n52 "user@test.com"
-aibrowsr fill --uid n58 "password123"
-aibrowsr click n63 --inspect
+chrome-agent fill --uid n52 "user@test.com"
+chrome-agent fill --uid n58 "password123"
+chrome-agent click n63 --inspect
 # uid=n101 heading "Dashboard" level=1
 ```
 
@@ -167,20 +167,20 @@ From least to most tokens:
 
 ```bash
 # Articles (Readability, like Firefox Reader Mode)
-aibrowsr read
+chrome-agent read
 
 # Repeating data -- products, search results, feeds. No selectors.
-aibrowsr extract
+chrome-agent extract
 # Uses MDR/DEPTA heuristics. Finds the pattern automatically.
 
 # React SPAs (X.com, etc.) -- uses a11y tree instead of DOM
-aibrowsr extract --a11y --scroll --limit 20
+chrome-agent extract --a11y --scroll --limit 20
 
 # Scoped visible text
-aibrowsr text --selector "[role=main]" --truncate 1000
+chrome-agent text --selector "[role=main]" --truncate 1000
 
 # API responses -- skip the DOM
-aibrowsr network --filter "api" --body
+chrome-agent network --filter "api" --body
 ```
 
 ## Stealth
@@ -201,26 +201,26 @@ For sites with heavier protection (DataDome, Kasada) that fingerprint the Chromi
 
 ```bash
 google-chrome --remote-debugging-port=9222 &
-aibrowsr --connect http://127.0.0.1:9222 goto https://www.leboncoin.fr --inspect
+chrome-agent --connect http://127.0.0.1:9222 goto https://www.leboncoin.fr --inspect
 ```
 
 | Protection | Solution |
 |---|---|
-| None | `aibrowsr goto ...` |
-| Cloudflare/Turnstile | `aibrowsr --stealth goto ...` |
-| Logged-in sites | `aibrowsr --stealth --copy-cookies goto ...` |
-| DataDome/Kasada | `aibrowsr --connect` to real Chrome |
+| None | `chrome-agent goto ...` |
+| Cloudflare/Turnstile | `chrome-agent --stealth goto ...` |
+| Logged-in sites | `chrome-agent --stealth --copy-cookies goto ...` |
+| DataDome/Kasada | `chrome-agent --connect` to real Chrome |
 
 ## Logged-in sites
 
 `--copy-cookies` copies the cookie database from your Chrome profile. Both Chrome instances use the same macOS Keychain, so encrypted cookies just work.
 
 ```bash
-aibrowsr --stealth --copy-cookies goto x.com/home --inspect
+chrome-agent --stealth --copy-cookies goto x.com/home --inspect
 # Your timeline. Your DMs. No login flow.
 
-aibrowsr --copy-cookies goto mail.google.com --inspect
-aibrowsr --copy-cookies goto github.com/notifications --inspect
+chrome-agent --copy-cookies goto mail.google.com --inspect
+chrome-agent --copy-cookies goto github.com/notifications --inspect
 ```
 
 Your real Chrome is not affected.
@@ -229,13 +229,13 @@ Your real Chrome is not affected.
 
 ```bash
 # Resources already loaded (stealth-safe, uses Performance API)
-aibrowsr network --filter "api"
+chrome-agent network --filter "api"
 
 # Live traffic with response bodies
-aibrowsr network --live 5 --body --filter "graphql"
+chrome-agent network --live 5 --body --filter "graphql"
 
 # Console output
-aibrowsr console --level error    # errors + exceptions only
+chrome-agent console --level error    # errors + exceptions only
 ```
 
 Console capture uses an injected interceptor, not `Runtime.enable`.
@@ -247,7 +247,7 @@ For agents that send many commands in sequence, pipe mode keeps a single connect
 ```bash
 echo '{"cmd":"goto","url":"https://example.com","inspect":true}
 {"cmd":"click","uid":"n12","inspect":true}
-{"cmd":"read"}' | aibrowsr pipe
+{"cmd":"read"}' | chrome-agent pipe
 ```
 
 One JSON line per response. About 10x faster than spawning a process per command.
@@ -255,38 +255,38 @@ One JSON line per response. About 10x faster than spawning a process per command
 ## JSON mode
 
 ```bash
-aibrowsr --json goto https://example.com --inspect
+chrome-agent --json goto https://example.com --inspect
 # {"ok":true,"url":"...","title":"...","snapshot":"uid=n1 heading..."}
 
-aibrowsr --json eval "1+1"
+chrome-agent --json eval "1+1"
 # {"ok":true,"result":2}
 
 # Errors exit 0 so agents can always parse stdout:
-aibrowsr --json click n99
-# {"ok":false,"error":"Element uid=n99 not found.","hint":"Run 'aibrowsr inspect'"}
+chrome-agent --json click n99
+# {"ok":false,"error":"Element uid=n99 not found.","hint":"Run 'chrome-agent inspect'"}
 ```
 
 ## Multi-tab and parallel agents
 
 ```bash
 # Multiple tabs in one browser
-aibrowsr --page main goto https://app.com
-aibrowsr --page docs goto https://docs.app.com
-aibrowsr --page main eval "document.title"   # "App"
+chrome-agent --page main goto https://app.com
+chrome-agent --page docs goto https://docs.app.com
+chrome-agent --page main eval "document.title"   # "App"
 
 # Multiple agents, each with their own Chrome
-aibrowsr --browser agent1 goto https://example.com
-aibrowsr --browser agent2 goto https://other.com
+chrome-agent --browser agent1 goto https://example.com
+chrome-agent --browser agent2 goto https://other.com
 ```
 
 ## Using with AI agents
 
 ```bash
 # Install the skill (Claude Code, Cursor, Copilot, etc.)
-npx skills add sderosiaux/aibrowsr
+npx skills add sderosiaux/chrome-agent
 
 # Or tell your agent to run:
-aibrowsr --help
+chrome-agent --help
 # The help output includes a full LLM usage guide.
 ```
 
@@ -295,14 +295,14 @@ Claude Code permissions:
 ```json
 {
   "permissions": {
-    "allow": ["Bash(aibrowsr *)"]
+    "allow": ["Bash(chrome-agent *)"]
   }
 }
 ```
 
 ## Comparison
 
-| | aibrowsr | dev-browser | chrome-devtools-mcp | Playwright MCP |
+| | chrome-agent | dev-browser | chrome-devtools-mcp | Playwright MCP |
 |---|---|---|---|---|
 | Language | Rust | Rust + Node.js | TypeScript | TypeScript |
 | Runtime deps | none | Node + npm + Playwright + QuickJS | Node + Puppeteer | Node + Playwright |

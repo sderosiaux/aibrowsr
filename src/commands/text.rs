@@ -64,7 +64,7 @@ pub async fn run(
         Some(uid) => {
             let element_ref = uid_map.get(uid).ok_or_else(|| {
                 format!(
-                    "Element uid={uid} not found. Run 'aibrowsr inspect' to get fresh uids."
+                    "Element uid={uid} not found. Run 'chrome-agent inspect' to get fresh uids."
                 )
             })?;
             let backend_node_id = element_ref.backend_node_id().ok_or_else(|| {
@@ -77,7 +77,7 @@ pub async fn run(
                     ResolveNodeParams {
                         node_id: None,
                         backend_node_id: Some(backend_node_id),
-                        object_group: Some("aibrowsr".into()),
+                        object_group: Some("chrome-agent".into()),
                         execution_context_id: None,
                     },
                 )

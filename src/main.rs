@@ -27,7 +27,7 @@ use crate::run_helpers::{cmd_close, cmd_status, cmd_stop, connect_page, error_hi
 // ---------------------------------------------------------------------------
 
 const CLI_LONG_ABOUT: &str = "\
-aibrowsr — browser automation for AI agents. Controls Chrome via CDP.\n\
+chrome-agent — browser automation for AI agents. Controls Chrome via CDP.\n\
 Single binary, zero runtime dependencies. Named pages persist between invocations.\n\
 Use --stealth to bypass bot detection (Cloudflare, Turnstile).\n\
 Use --copy-cookies to access sites where you're already logged in (X.com, Gmail).\n\
@@ -39,9 +39,9 @@ const CLI_AFTER_LONG_HELP: &str = include_str!("../llm-guide.txt");
 
 #[derive(Parser)]
 #[command(
-    name = "aibrowsr",
+    name = "chrome-agent",
     version,
-    about = "aibrowsr — browser automation for AI agents",
+    about = "chrome-agent — browser automation for AI agents",
     long_about = CLI_LONG_ABOUT,
     after_long_help = CLI_AFTER_LONG_HELP,
 )]
@@ -547,7 +547,7 @@ async fn run(cli: Cli) -> Result<(), BoxError> {
         );
         if needs_existing {
             return Err(format!(
-                "No browser session '{}'. Run `aibrowsr --browser {} goto <url>` first.",
+                "No browser session '{}'. Run `chrome-agent --browser {} goto <url>` first.",
                 cli.browser, cli.browser
             ).into());
         }
@@ -765,7 +765,7 @@ async fn run(cli: Cli) -> Result<(), BoxError> {
                 .get(&cli.browser)
                 .and_then(|b| b.pages.get(&cli.page))
                 .and_then(|p| p.last_snapshot.clone());
-            let old_text = old_snapshot.ok_or("No previous snapshot. Run 'aibrowsr inspect' first.")?;
+            let old_text = old_snapshot.ok_or("No previous snapshot. Run 'chrome-agent inspect' first.")?;
             let snapshot = commands::inspect::run(&client, false, None, None, None).await?;
             let diff = commands::diff::diff_snapshots(&old_text, &snapshot.text);
             let stats = commands::diff::diff_stats(&diff);
@@ -889,7 +889,7 @@ async fn run(cli: Cli) -> Result<(), BoxError> {
                 uid => {
                     let uid_map = get_uid_map(&store, &cli.browser, &cli.page);
                     let element_ref = uid_map.get(uid).ok_or_else(|| {
-                        format!("Element uid={uid} not found. Run 'aibrowsr inspect' to get fresh uids.")
+                        format!("Element uid={uid} not found. Run 'chrome-agent inspect' to get fresh uids.")
                     })?;
                     let backend_node_id = element_ref.backend_node_id().ok_or_else(|| {
                         format!("Element uid={uid} has no resolvable backend node.")
@@ -900,7 +900,7 @@ async fn run(cli: Cli) -> Result<(), BoxError> {
                             crate::cdp::types::ResolveNodeParams {
                                 node_id: None,
                                 backend_node_id: Some(backend_node_id),
-                                object_group: Some("aibrowsr".into()),
+                                object_group: Some("chrome-agent".into()),
                                 execution_context_id: None,
                             },
                         )

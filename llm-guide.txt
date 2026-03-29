@@ -3,89 +3,89 @@ LLM USAGE GUIDE:
   Headless by default. Add --stealth for bot-protected sites. Use --json for structured output.
 
   Quick start:
-    aibrowsr goto https://example.com --inspect
-    aibrowsr click n12 --inspect
-    aibrowsr fill --uid n20 "hello@example.com"
-    aibrowsr read                              # article content (Readability)
-    aibrowsr eval "document.title"
+    chrome-agent goto https://example.com --inspect
+    chrome-agent click n12 --inspect
+    chrome-agent fill --uid n20 "hello@example.com"
+    chrome-agent read                              # article content (Readability)
+    chrome-agent eval "document.title"
 
   Stealth (bypass Cloudflare/bot detection):
-    aibrowsr --stealth goto https://protected-site.com --inspect
+    chrome-agent --stealth goto https://protected-site.com --inspect
     # Patches navigator.webdriver, chrome.runtime, UA, WebGL, input leak, skips Runtime.enable
 
   Logged-in sites (X.com, Gmail, dashboards — use your Chrome cookies):
-    aibrowsr --stealth --copy-cookies goto x.com/home --inspect
+    chrome-agent --stealth --copy-cookies goto x.com/home --inspect
     # Copies cookies from your real Chrome profile. No manual login needed.
 
   Heavy bot protection (DataDome, Kasada — when --stealth isn't enough):
     # Use your real Chrome instead of bundled Chromium:
     google-chrome --remote-debugging-port=9222 &
-    aibrowsr --connect http://127.0.0.1:9222 goto https://protected-site.com --inspect
+    chrome-agent --connect http://127.0.0.1:9222 goto https://protected-site.com --inspect
     # Real Chrome passes fingerprint checks that Chromium can't
 
   Targeting elements (3 modes):
-    aibrowsr click n40                              # by uid from inspect
-    aibrowsr click --selector "button.submit"      # by CSS selector
-    aibrowsr click --xy 100,200                    # by coordinates
-    aibrowsr fill --uid n20 "value"                 # fill by uid
-    aibrowsr fill --selector "input[name=q]" "val" # fill by CSS selector
+    chrome-agent click n40                              # by uid from inspect
+    chrome-agent click --selector "button.submit"      # by CSS selector
+    chrome-agent click --xy 100,200                    # by coordinates
+    chrome-agent fill --uid n20 "value"                 # fill by uid
+    chrome-agent fill --selector "input[name=q]" "val" # fill by CSS selector
 
   Inspection + filtering:
-    aibrowsr inspect                               # full accessibility tree
-    aibrowsr inspect --max-depth 2                 # limit depth (saves tokens)
-    aibrowsr inspect --filter "button,link"        # only these roles (flat list)
-    aibrowsr inspect --uid n50                     # subtree only
-    aibrowsr inspect --filter "article" --scroll --limit 50  # infinite scroll (X.com, feeds)
+    chrome-agent inspect                               # full accessibility tree
+    chrome-agent inspect --max-depth 2                 # limit depth (saves tokens)
+    chrome-agent inspect --filter "button,link"        # only these roles (flat list)
+    chrome-agent inspect --uid n50                     # subtree only
+    chrome-agent inspect --filter "article" --scroll --limit 50  # infinite scroll (X.com, feeds)
 
   Content extraction (choose the right tool):
-    aibrowsr read                                  # article/main content (Readability)
-    aibrowsr read --truncate 1000                  # capped at N chars
-    aibrowsr text --selector "main" --truncate 500 # visible text of CSS-matched element
-    aibrowsr text                                  # full page innerText (verbose)
-    aibrowsr extract                                # auto-detect repeating data (tables, cards, lists)
-    aibrowsr extract --scroll                      # scroll first for lazy-loaded pages (YouTube, Pinterest)
-    aibrowsr extract --a11y --scroll --limit 20    # React SPAs (X.com) -- uses a11y tree, not DOM
-    aibrowsr eval "JSON.stringify(...)"            # structured data via JS
-    aibrowsr eval --selector "h1" "el.textContent" # eval scoped to a CSS element (el = matched)
-    aibrowsr network --filter "api" --body         # intercept API responses directly
-    aibrowsr console --level error                 # see JS errors from the page
+    chrome-agent read                                  # article/main content (Readability)
+    chrome-agent read --truncate 1000                  # capped at N chars
+    chrome-agent text --selector "main" --truncate 500 # visible text of CSS-matched element
+    chrome-agent text                                  # full page innerText (verbose)
+    chrome-agent extract                                # auto-detect repeating data (tables, cards, lists)
+    chrome-agent extract --scroll                      # scroll first for lazy-loaded pages (YouTube, Pinterest)
+    chrome-agent extract --a11y --scroll --limit 20    # React SPAs (X.com) -- uses a11y tree, not DOM
+    chrome-agent eval "JSON.stringify(...)"            # structured data via JS
+    chrome-agent eval --selector "h1" "el.textContent" # eval scoped to a CSS element (el = matched)
+    chrome-agent network --filter "api" --body         # intercept API responses directly
+    chrome-agent console --level error                 # see JS errors from the page
 
   Network capture ("Readability for APIs"):
-    aibrowsr network                               # resources already loaded (stealth-safe)
-    aibrowsr network --filter "graphql" --body     # filter + response bodies
-    aibrowsr network --live 5 --body               # capture live traffic for 5 seconds
+    chrome-agent network                               # resources already loaded (stealth-safe)
+    chrome-agent network --filter "graphql" --body     # filter + response bodies
+    chrome-agent network --live 5 --body               # capture live traffic for 5 seconds
 
   Console capture (stealth-safe):
-    aibrowsr console                               # all messages
-    aibrowsr console --level error                 # errors + exceptions only
+    chrome-agent console                               # all messages
+    chrome-agent console --level error                 # errors + exceptions only
 
   Pipe mode (persistent connection, 10x faster):
-    echo '{"cmd":"goto","url":"https://example.com","inspect":true}' | aibrowsr pipe
+    echo '{"cmd":"goto","url":"https://example.com","inspect":true}' | chrome-agent pipe
     # Returns one JSON line per command: {"ok":true,...}
 
   Navigation:
-    aibrowsr goto https://example.com              # navigate
-    aibrowsr goto https://spa.com --wait-for "main" # wait for selector after nav
-    aibrowsr back                                  # history.back()
-    aibrowsr scroll down                           # scroll page
-    aibrowsr wait text "Success"                   # wait for content
+    chrome-agent goto https://example.com              # navigate
+    chrome-agent goto https://spa.com --wait-for "main" # wait for selector after nav
+    chrome-agent back                                  # history.back()
+    chrome-agent scroll down                           # scroll page
+    chrome-agent wait text "Success"                   # wait for content
 
   Multi-tab:
-    aibrowsr --page tab2 goto https://other.com
-    aibrowsr --page tab2 inspect
+    chrome-agent --page tab2 goto https://other.com
+    chrome-agent --page tab2 inspect
 
   Parallel agents (avoid session conflicts):
-    aibrowsr --browser agent1 goto https://example.com  # isolated browser per agent
-    aibrowsr --browser agent2 goto https://other.com    # separate Chrome instance
+    chrome-agent --browser agent1 goto https://example.com  # isolated browser per agent
+    chrome-agent --browser agent2 goto https://other.com    # separate Chrome instance
 
   JSON mode:
-    aibrowsr --json goto https://example.com
+    chrome-agent --json goto https://example.com
     -> {"ok":true,"url":"...","title":"..."}
     Errors: {"ok":false,"error":"...","hint":"..."} (exit 0, always parseable)
 
   Cleanup:
-    aibrowsr close                                 # stop browser
-    aibrowsr close --purge                         # stop + delete cookies/profile
+    chrome-agent close                                 # stop browser
+    chrome-agent close --purge                         # stop + delete cookies/profile
 
   Important tips:
     - Use --stealth on sites with bot protection (Cloudflare, Turnstile).

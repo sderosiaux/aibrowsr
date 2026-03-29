@@ -271,7 +271,7 @@ describe('fixture: extract_definition_list.html (FAQ)', () => {
   it('extracts question titles', () => {
     const r = extractFromHTML(html);
     const titles = r.items.map(i => i.title);
-    assert.ok(titles.some(t => t && t.includes('aibrowsr')));
+    assert.ok(titles.some(t => t && t.includes('chrome-agent')));
   });
 });
 
@@ -286,13 +286,13 @@ describe('fixture: extract_semantic_classes.html (repo list)', () => {
   it('extracts repo names as titles', () => {
     const r = extractFromHTML(html);
     const titles = r.items.map(i => i.title);
-    assert.ok(titles.includes('aibrowsr'));
+    assert.ok(titles.includes('chrome-agent'));
     assert.ok(titles.includes('dev-browser'));
   });
 
   it('extracts repo URLs', () => {
     const r = extractFromHTML(html);
-    assert.ok(r.items.some(i => i.url && i.url.includes('/repo/aibrowsr')));
+    assert.ok(r.items.some(i => i.url && i.url.includes('/repo/chrome-agent')));
   });
 
   it('extracts dates', () => {

@@ -1,10 +1,10 @@
 {
-  "name": "aibrowsr",
+  "name": "chrome-agent",
   "version": "0.3.0",
   "description": "Browser automation for AI agents. Single binary, zero dependencies, CDP direct.",
   "type": "module",
   "bin": {
-    "aibrowsr": "./bin/aibrowsr.js"
+    "chrome-agent": "./bin/chrome-agent.js"
   },
   "scripts": {
     "postinstall": "node scripts/postinstall.js"
@@ -28,7 +28,7 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/sderosiaux/aibrowsr.git"
+    "url": "git+https://github.com/sderosiaux/chrome-agent.git"
   },
   "author": "Stephane Derosiaux"
 }

@@ -15,11 +15,11 @@ pub struct HistoryEntry {
 
 fn history_path() -> Result<PathBuf, crate::BoxError> {
     dirs::home_dir()
-        .map(|h| h.join(".aibrowsr").join("history.jsonl"))
+        .map(|h| h.join(".chrome-agent").join("history.jsonl"))
         .ok_or_else(|| "Could not determine home directory".into())
 }
 
-/// Append a navigation entry to `~/.aibrowsr/history.jsonl`.
+/// Append a navigation entry to `~/.chrome-agent/history.jsonl`.
 pub fn append(url: &str, title: &str, page: &str) -> Result<(), crate::BoxError> {
     let path = history_path()?;
     if let Some(parent) = path.parent() {

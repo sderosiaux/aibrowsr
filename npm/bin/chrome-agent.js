@@ -9,14 +9,14 @@ import { fileURLToPath } from 'url';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const packageJson = JSON.parse(readFileSync(join(__dirname, '..', 'package.json'), 'utf8'));
 const version = packageJson.version;
-const repoSlug = 'sderosiaux/aibrowsr';
+const repoSlug = 'sderosiaux/chrome-agent';
 
 const supportedTargets = Object.freeze({
-  'darwin-arm64': 'aibrowsr-darwin-arm64',
-  'darwin-x64': 'aibrowsr-darwin-x64',
-  'linux-arm64': 'aibrowsr-linux-arm64',
-  'linux-x64': 'aibrowsr-linux-x64',
-  'win32-x64': 'aibrowsr-windows-x64.exe',
+  'darwin-arm64': 'chrome-agent-darwin-arm64',
+  'darwin-x64': 'chrome-agent-darwin-x64',
+  'linux-arm64': 'chrome-agent-linux-arm64',
+  'linux-x64': 'chrome-agent-linux-x64',
+  'win32-x64': 'chrome-agent-windows-x64.exe',
 });
 
 function getTargetKey() {

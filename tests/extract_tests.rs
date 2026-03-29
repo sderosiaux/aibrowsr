@@ -9,7 +9,7 @@ fn binary() -> String {
         .parent()
         .unwrap()
         .to_path_buf();
-    path.push("aibrowsr");
+    path.push("chrome-agent");
     path.to_string_lossy().into_owned()
 }
 
@@ -24,7 +24,7 @@ fn run_cli(args: &[&str]) -> (String, String, i32) {
     let output = Command::new(binary())
         .args(args)
         .output()
-        .expect("Failed to run aibrowsr");
+        .expect("Failed to run chrome-agent");
     let stdout = String::from_utf8_lossy(&output.stdout).to_string();
     let stderr = String::from_utf8_lossy(&output.stderr).to_string();
     let code = output.status.code().unwrap_or(-1);
@@ -411,7 +411,7 @@ fn extract_semantic_classes_boost() {
 
     let first_title = items[0].get("title").and_then(|v| v.as_str()).unwrap_or("");
     assert!(
-        first_title.contains("aibrowsr") || first_title.contains("dev-browser"),
+        first_title.contains("chrome-agent") || first_title.contains("dev-browser"),
         "First item should be repo, got: '{first_title}'"
     );
 

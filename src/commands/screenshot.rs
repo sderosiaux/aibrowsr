@@ -62,7 +62,7 @@ pub async fn run(
 
 fn screenshot_dir() -> Result<PathBuf, crate::BoxError> {
     let home = dirs::home_dir().ok_or("Could not determine home directory")?;
-    Ok(home.join(".aibrowsr").join("tmp"))
+    Ok(home.join(".chrome-agent").join("tmp"))
 }
 
 /// Minimal base64 decoder (RFC 4648). Avoids pulling in the `base64` crate.

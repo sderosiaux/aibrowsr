@@ -64,7 +64,7 @@ pub fn load_session() -> Result<SessionStore, SessionError> {
 pub fn save_session(store: &mut SessionStore) -> Result<(), SessionError> {
     let path = session_path()?;
 
-    // Detect concurrent modification (another aibrowsr process touched the file)
+    // Detect concurrent modification (another chrome-agent process touched the file)
     if let Some(loaded_mtime) = store.loaded_mtime
         && let Ok(current_mtime) = std::fs::metadata(&path).and_then(|m| m.modified())
             && current_mtime != loaded_mtime {
@@ -189,7 +189,7 @@ fn session_path() -> Result<PathBuf, SessionError> {
 
 fn dev_browser_dir() -> Result<PathBuf, SessionError> {
     dirs::home_dir()
-        .map(|h| h.join(".aibrowsr"))
+        .map(|h| h.join(".chrome-agent"))
         .ok_or_else(|| SessionError("Could not determine home directory".into()))
 }
 
@@ -237,7 +237,7 @@ mod tests {
 
     #[test]
     fn bug_session_corrupt_json() {
-        let dir = std::env::temp_dir().join("aibrowsr_test_corrupt");
+        let dir = std::env::temp_dir().join("chrome-agent_test_corrupt");
         std::fs::create_dir_all(&dir).unwrap();
         let path = dir.join("sessions.json");
         std::fs::write(&path, "NOT VALID JSON {{{").unwrap();
