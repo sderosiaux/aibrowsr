@@ -15,19 +15,19 @@ jobs:
         include:
           - target: x86_64-apple-darwin
             os: macos-latest
-            artifact: aibrowsr-darwin-x64
+            artifact: chrome-agent-darwin-x64
           - target: aarch64-apple-darwin
             os: macos-latest
-            artifact: aibrowsr-darwin-arm64
+            artifact: chrome-agent-darwin-arm64
           - target: x86_64-unknown-linux-gnu
             os: ubuntu-latest
-            artifact: aibrowsr-linux-x64
+            artifact: chrome-agent-linux-x64
           - target: aarch64-unknown-linux-gnu
             os: ubuntu-latest
-            artifact: aibrowsr-linux-arm64
+            artifact: chrome-agent-linux-arm64
           - target: x86_64-pc-windows-msvc
             os: windows-latest
-            artifact: aibrowsr-windows-x64.exe
+            artifact: chrome-agent-windows-x64.exe
 
     runs-on: ${{ matrix.os }}
 
@@ -51,11 +51,11 @@ jobs:
 
       - name: Rename binary (Unix)
         if: runner.os != 'Windows'
-        run: cp target/${{ matrix.target }}/release/aibrowsr ${{ matrix.artifact }}
+        run: cp target/${{ matrix.target }}/release/chrome-agent ${{ matrix.artifact }}
 
       - name: Rename binary (Windows)
         if: runner.os == 'Windows'
-        run: cp target/${{ matrix.target }}/release/aibrowsr.exe ${{ matrix.artifact }}
+        run: cp target/${{ matrix.target }}/release/chrome-agent.exe ${{ matrix.artifact }}
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
