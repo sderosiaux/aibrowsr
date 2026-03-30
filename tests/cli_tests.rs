@@ -138,6 +138,24 @@ fn eval_subcommand_help() {
 // Integration tests that require Chrome (skipped in CI without Chrome)
 // These are guarded by a check for Chrome availability.
 
+/// RAII guard: closes browser on drop (even on panic).
+struct TestBrowser(&'static str);
+
+impl TestBrowser {
+    const fn new(name: &'static str) -> Self {
+        Self(name)
+    }
+    const fn name(&self) -> &str {
+        self.0
+    }
+}
+
+impl Drop for TestBrowser {
+    fn drop(&mut self) {
+        let _ = run_cli(&["--browser", self.0, "close"]);
+    }
+}
+
 fn chrome_available() -> bool {
     // Check if any Chrome-like binary exists
     let candidates = if cfg!(target_os = "macos") {
@@ -169,11 +187,12 @@ fn headed_goto_and_eval() {
         return;
     }
 
+    let b = TestBrowser::new("test-integration");
+
     // Navigate
     let (stdout, stderr, code) = run_cli(&[
-        
         "--browser",
-        "test-integration",
+        b.name(),
         "goto",
         "https://example.com",
     ]);
@@ -190,9 +209,8 @@ fn headed_goto_and_eval() {
 
     // Eval on same browser
     let (stdout, _, code) = run_cli(&[
-        
         "--browser",
-        "test-integration",
+        b.name(),
         "eval",
         "document.title",
     ]);
@@ -203,9 +221,6 @@ fn headed_goto_and_eval() {
             "eval output: {stdout}"
         );
     }
-
-    // Cleanup
-    let _ = run_cli(&["--browser", "test-integration", "close"]);
 }
 
 #[test]
@@ -215,31 +230,20 @@ fn headed_inspect_returns_uids() {
         return;
     }
 
-    let (_, _, code) = run_cli(&[
-        
-        "--browser",
-        "test-inspect",
-        "goto",
-        "https://example.com",
-    ]);
+    let b = TestBrowser::new("test-inspect");
+
+    let (_, _, code) = run_cli(&["--browser", b.name(), "goto", "https://example.com"]);
 
     if code != 0 {
         eprintln!("SKIP: goto failed");
         return;
     }
 
-    let (stdout, _, code) = run_cli(&[
-        
-        "--browser",
-        "test-inspect",
-        "inspect",
-    ]);
+    let (stdout, _, code) = run_cli(&["--browser", b.name(), "inspect"]);
 
     if code == 0 {
         assert!(stdout.contains("uid="), "inspect should contain uid=N: {stdout}");
     }
-
-    let _ = run_cli(&["--browser", "test-inspect", "close"]);
 }
 
 #[test]
@@ -249,40 +253,28 @@ fn headed_screenshot_returns_path() {
         return;
     }
 
-    let (_, _, code) = run_cli(&[
-        
-        "--browser",
-        "test-screenshot",
-        "goto",
-        "https://example.com",
-    ]);
+    let b = TestBrowser::new("test-screenshot");
+
+    let (_, _, code) = run_cli(&["--browser", b.name(), "goto", "https://example.com"]);
 
     if code != 0 {
         eprintln!("SKIP: goto failed");
         return;
     }
 
-    let (stdout, _, code) = run_cli(&[
-        
-        "--browser",
-        "test-screenshot",
-        "screenshot",
-    ]);
+    let (stdout, _, code) = run_cli(&["--browser", b.name(), "screenshot"]);
 
     if code == 0 {
         assert!(
             stdout.contains(".png") && stdout.contains(".chrome-agent/tmp/"),
             "screenshot should return a file path: {stdout}"
         );
-        // Verify file exists
         let path = stdout.trim();
         assert!(
             std::path::Path::new(path).exists(),
             "Screenshot file should exist at {path}"
         );
     }
-
-    let _ = run_cli(&["--browser", "test-screenshot", "close"]);
 }
 
 #[test]
@@ -292,25 +284,16 @@ fn headed_tabs_lists_pages() {
         return;
     }
 
-    let (_, _, code) = run_cli(&[
-        
-        "--browser",
-        "test-tabs",
-        "goto",
-        "https://example.com",
-    ]);
+    let b = TestBrowser::new("test-tabs");
+
+    let (_, _, code) = run_cli(&["--browser", b.name(), "goto", "https://example.com"]);
 
     if code != 0 {
         eprintln!("SKIP: goto failed");
         return;
     }
 
-    let (stdout, _, code) = run_cli(&[
-        
-        "--browser",
-        "test-tabs",
-        "tabs",
-    ]);
+    let (stdout, _, code) = run_cli(&["--browser", b.name(), "tabs"]);
 
     if code == 0 {
         assert!(
@@ -318,6 +301,4 @@ fn headed_tabs_lists_pages() {
             "tabs output: {stdout}"
         );
     }
-
-    let _ = run_cli(&["--browser", "test-tabs", "close"]);
 }

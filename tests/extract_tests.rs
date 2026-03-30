@@ -99,16 +99,33 @@ fn cleanup(browser: &str) {
     let _ = run_cli(&["--browser", browser, "close", "--purge"]);
 }
 
+/// RAII guard: closes browser on drop (even on panic).
+struct TestBrowser(&'static str);
+
+impl TestBrowser {
+    const fn new(name: &'static str) -> Self {
+        Self(name)
+    }
+    const fn name(&self) -> &str {
+        self.0
+    }
+}
+
+impl Drop for TestBrowser {
+    fn drop(&mut self) {
+        cleanup(self.0);
+    }
+}
+
 // ─── Product table: should extract TR rows with links and prices ───
 
 #[test]
 fn extract_table_finds_product_rows() {
     if !chrome_available() { eprintln!("SKIP: Chrome not found"); return; }
-    let b = "ext-table";
-    if !goto_fixture(b, "extract_table.html") { cleanup(b); return; }
+    let b = TestBrowser::new("ext-table");
+    if !goto_fixture(b.name(), "extract_table.html") { return; }
 
-    let json = extract_json(b);
-    cleanup(b);
+    let json = extract_json(b.name());
 
     let json = json.expect("extract should return JSON");
     let items = json["items"].as_array().expect("items array");
@@ -130,11 +147,10 @@ fn extract_table_finds_product_rows() {
 #[test]
 fn extract_cards_finds_articles() {
     if !chrome_available() { eprintln!("SKIP: Chrome not found"); return; }
-    let b = "ext-cards";
-    if !goto_fixture(b, "extract_cards.html") { cleanup(b); return; }
+    let b = TestBrowser::new("ext-cards");
+    if !goto_fixture(b.name(), "extract_cards.html") { return; }
 
-    let json = extract_json(b);
-    cleanup(b);
+    let json = extract_json(b.name());
 
     let json = json.expect("extract should return JSON");
     let items = json["items"].as_array().expect("items array");
@@ -161,11 +177,10 @@ fn extract_cards_finds_articles() {
 #[test]
 fn extract_hn_like_finds_stories_not_vote_links() {
     if !chrome_available() { eprintln!("SKIP: Chrome not found"); return; }
-    let b = "ext-hn";
-    if !goto_fixture(b, "extract_hn_like.html") { cleanup(b); return; }
+    let b = TestBrowser::new("ext-hn");
+    if !goto_fixture(b.name(), "extract_hn_like.html") { return; }
 
-    let json = extract_json(b);
-    cleanup(b);
+    let json = extract_json(b.name());
 
     let json = json.expect("extract should return JSON");
     let items = json["items"].as_array().expect("items array");
@@ -189,11 +204,10 @@ fn extract_hn_like_finds_stories_not_vote_links() {
 #[test]
 fn extract_ecommerce_finds_products_not_nav() {
     if !chrome_available() { eprintln!("SKIP: Chrome not found"); return; }
-    let b = "ext-ecom";
-    if !goto_fixture(b, "extract_ecommerce.html") { cleanup(b); return; }
+    let b = TestBrowser::new("ext-ecom");
+    if !goto_fixture(b.name(), "extract_ecommerce.html") { return; }
 
-    let json = extract_json(b);
-    cleanup(b);
+    let json = extract_json(b.name());
 
     let json = json.expect("extract should return JSON");
     let items = json["items"].as_array().expect("items array");
@@ -217,11 +231,10 @@ fn extract_ecommerce_finds_products_not_nav() {
 #[test]
 fn extract_list_finds_search_results() {
     if !chrome_available() { eprintln!("SKIP: Chrome not found"); return; }
-    let b = "ext-list";
-    if !goto_fixture(b, "extract_list.html") { cleanup(b); return; }
+    let b = TestBrowser::new("ext-list");
+    if !goto_fixture(b.name(), "extract_list.html") { return; }
 
-    let json = extract_json(b);
-    cleanup(b);
+    let json = extract_json(b.name());
 
     let json = json.expect("extract should return JSON");
     let items = json["items"].as_array().expect("items array");
@@ -245,11 +258,10 @@ fn extract_list_finds_search_results() {
 #[test]
 fn extract_nested_nav_prefers_content_over_navigation() {
     if !chrome_available() { eprintln!("SKIP: Chrome not found"); return; }
-    let b = "ext-nav";
-    if !goto_fixture(b, "extract_nested_nav.html") { cleanup(b); return; }
+    let b = TestBrowser::new("ext-nav");
+    if !goto_fixture(b.name(), "extract_nested_nav.html") { return; }
 
-    let json = extract_json(b);
-    cleanup(b);
+    let json = extract_json(b.name());
 
     let json = json.expect("extract should return JSON");
     let items = json["items"].as_array().expect("items array");
@@ -269,11 +281,10 @@ fn extract_nested_nav_prefers_content_over_navigation() {
 #[test]
 fn extract_no_pattern_returns_error() {
     if !chrome_available() { eprintln!("SKIP: Chrome not found"); return; }
-    let b = "ext-nopattern";
-    if !goto_fixture(b, "extract_no_pattern.html") { cleanup(b); return; }
+    let b = TestBrowser::new("ext-nopattern");
+    if !goto_fixture(b.name(), "extract_no_pattern.html") { return; }
 
-    let (stdout, _, code) = run_cli(&["--json", "--browser", b, "extract"]);
-    cleanup(b);
+    let (stdout, _, code) = run_cli(&["--json", "--browser", b.name(), "extract"]);
 
     if code == 0 {
         for line in stdout.lines() {
@@ -292,11 +303,10 @@ fn extract_no_pattern_returns_error() {
 #[test]
 fn extract_mixed_finds_activity_feed() {
     if !chrome_available() { eprintln!("SKIP: Chrome not found"); return; }
-    let b = "ext-mixed";
-    if !goto_fixture(b, "extract_mixed.html") { cleanup(b); return; }
+    let b = TestBrowser::new("ext-mixed");
+    if !goto_fixture(b.name(), "extract_mixed.html") { return; }
 
-    let json = extract_json(b);
-    cleanup(b);
+    let json = extract_json(b.name());
 
     let json = json.expect("extract should return JSON");
     let items = json["items"].as_array().expect("items array");
@@ -312,11 +322,10 @@ fn extract_mixed_finds_activity_feed() {
 #[test]
 fn extract_with_selector_scopes_correctly() {
     if !chrome_available() { eprintln!("SKIP: Chrome not found"); return; }
-    let b = "ext-selector";
-    if !goto_fixture(b, "extract_ecommerce.html") { cleanup(b); return; }
+    let b = TestBrowser::new("ext-selector");
+    if !goto_fixture(b.name(), "extract_ecommerce.html") { return; }
 
-    let json = extract_json_with_args(b, &["--selector", ".product-grid"]);
-    cleanup(b);
+    let json = extract_json_with_args(b.name(), &["--selector", ".product-grid"]);
 
     if let Some(json) = json {
         let count = json["count"].as_u64().unwrap_or(0);
@@ -329,11 +338,10 @@ fn extract_with_selector_scopes_correctly() {
 #[test]
 fn extract_limit_caps_results() {
     if !chrome_available() { eprintln!("SKIP: Chrome not found"); return; }
-    let b = "ext-limit";
-    if !goto_fixture(b, "extract_list.html") { cleanup(b); return; }
+    let b = TestBrowser::new("ext-limit");
+    if !goto_fixture(b.name(), "extract_list.html") { return; }
 
-    let json = extract_json_with_args(b, &["--limit", "2"]);
-    cleanup(b);
+    let json = extract_json_with_args(b.name(), &["--limit", "2"]);
 
     if let Some(json) = json {
         let items_len = json["items"].as_array().map_or(0, std::vec::Vec::len);
@@ -349,11 +357,10 @@ fn extract_limit_caps_results() {
 #[test]
 fn extract_link_heavy_nav_prefers_content() {
     if !chrome_available() { eprintln!("SKIP: Chrome not found"); return; }
-    let b = "ext-linknav";
-    if !goto_fixture(b, "extract_link_heavy_nav.html") { cleanup(b); return; }
+    let b = TestBrowser::new("ext-linknav");
+    if !goto_fixture(b.name(), "extract_link_heavy_nav.html") { return; }
 
-    let json = extract_json(b);
-    cleanup(b);
+    let json = extract_json(b.name());
 
     let json = json.expect("extract should return JSON");
     let items = json["items"].as_array().expect("items array");
@@ -374,11 +381,10 @@ fn extract_link_heavy_nav_prefers_content() {
 #[test]
 fn extract_faq_items() {
     if !chrome_available() { eprintln!("SKIP: Chrome not found"); return; }
-    let b = "ext-faq";
-    if !goto_fixture(b, "extract_definition_list.html") { cleanup(b); return; }
+    let b = TestBrowser::new("ext-faq");
+    if !goto_fixture(b.name(), "extract_definition_list.html") { return; }
 
-    let json = extract_json(b);
-    cleanup(b);
+    let json = extract_json(b.name());
 
     let json = json.expect("extract should return JSON");
     let items = json["items"].as_array().expect("items array");
@@ -397,11 +403,10 @@ fn extract_faq_items() {
 #[test]
 fn extract_semantic_classes_boost() {
     if !chrome_available() { eprintln!("SKIP: Chrome not found"); return; }
-    let b = "ext-semclass";
-    if !goto_fixture(b, "extract_semantic_classes.html") { cleanup(b); return; }
+    let b = TestBrowser::new("ext-semclass");
+    if !goto_fixture(b.name(), "extract_semantic_classes.html") { return; }
 
-    let json = extract_json(b);
-    cleanup(b);
+    let json = extract_json(b.name());
 
     let json = json.expect("extract should return JSON");
     let items = json["items"].as_array().expect("items array");
@@ -423,11 +428,10 @@ fn extract_semantic_classes_boost() {
 #[test]
 fn extract_ads_interleaved_finds_articles() {
     if !chrome_available() { eprintln!("SKIP: Chrome not found"); return; }
-    let b = "ext-ads";
-    if !goto_fixture(b, "extract_ads_interleaved.html") { cleanup(b); return; }
+    let b = TestBrowser::new("ext-ads");
+    if !goto_fixture(b.name(), "extract_ads_interleaved.html") { return; }
 
-    let json = extract_json(b);
-    cleanup(b);
+    let json = extract_json(b.name());
 
     let json = json.expect("extract should return JSON");
     let items = json["items"].as_array().expect("items array");
@@ -454,11 +458,10 @@ fn extract_ads_interleaved_finds_articles() {
 #[test]
 fn extract_flat_table_rows() {
     if !chrome_available() { eprintln!("SKIP: Chrome not found"); return; }
-    let b = "ext-ftable";
-    if !goto_fixture(b, "extract_flat_table.html") { cleanup(b); return; }
+    let b = TestBrowser::new("ext-ftable");
+    if !goto_fixture(b.name(), "extract_flat_table.html") { return; }
 
-    let json = extract_json(b);
-    cleanup(b);
+    let json = extract_json(b.name());
 
     let json = json.expect("extract should return JSON");
     let items = json["items"].as_array().expect("items array");
