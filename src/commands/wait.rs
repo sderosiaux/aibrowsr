@@ -16,8 +16,11 @@ pub async fn run(
     let poll_interval = Duration::from_millis(200);
 
     let expression = match what {
+        // Support both plain substrings and regex patterns (e.g. "Foo|Bar", "^Loading").
+        // new RegExp(pattern) is backward-compatible with plain strings since every
+        // literal string is a valid regex that matches itself.
         "text" => format!(
-            "document.body.innerText.includes({})",
+            "new RegExp({}).test(document.body.innerText)",
             serde_json::to_string(pattern)?
         ),
         "url" => format!(

@@ -197,11 +197,21 @@ pub async fn fill(
 ) -> Result<(), ElementError> {
     let resolved = resolve_uid(client, uid_map, uid).await?;
 
-    // Focus, clear, set value, dispatch events
+    // Focus, clear, set value, dispatch events.
+    // Use the native HTMLInputElement/HTMLTextAreaElement value setter so React's
+    // synthetic onChange fires (React wraps the descriptor; direct assignment is
+    // intercepted by React but the setter via Object.getOwnPropertyDescriptor is not).
     let js = r"function(v) {
             this.focus();
-            this.value = '';
-            this.value = v;
+            var proto = this instanceof HTMLTextAreaElement
+                ? window.HTMLTextAreaElement.prototype
+                : window.HTMLInputElement.prototype;
+            var setter = Object.getOwnPropertyDescriptor(proto, 'value');
+            if (setter && setter.set) {
+                setter.set.call(this, v);
+            } else {
+                this.value = v;
+            }
             this.dispatchEvent(new Event('input', {bubbles: true}));
             this.dispatchEvent(new Event('change', {bubbles: true}));
         }".to_string();
@@ -466,8 +476,15 @@ pub async fn fill_selector(
             const el = document.querySelector({sel});
             if (!el) throw new Error('No element matches selector: ' + {sel});
             el.focus();
-            el.value = '';
-            el.value = {val};
+            const proto = el instanceof HTMLTextAreaElement
+                ? window.HTMLTextAreaElement.prototype
+                : window.HTMLInputElement.prototype;
+            const setter = Object.getOwnPropertyDescriptor(proto, 'value');
+            if (setter && setter.set) {{
+                setter.set.call(el, {val});
+            }} else {{
+                el.value = {val};
+            }}
             el.dispatchEvent(new Event('input', {{bubbles: true}}));
             el.dispatchEvent(new Event('change', {{bubbles: true}}));
         }})()",

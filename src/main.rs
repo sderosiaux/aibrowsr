@@ -274,6 +274,9 @@ enum Command {
     Scroll {
         /// "up", "down", or a uid to scroll into view
         target: String,
+        /// Pixels to scroll when using "up" or "down" (default: 500)
+        #[arg(long, default_value = "500")]
+        px: u64,
     },
 
     /// Hover over an element by uid
@@ -866,25 +869,25 @@ async fn run(cli: Cli) -> Result<(), BoxError> {
             }
         }
 
-        Command::Scroll { target } => {
+        Command::Scroll { target, px } => {
             let msg = match target.as_str() {
                 "down" => {
                     let _: serde_json::Value = client
                         .call("Runtime.evaluate", json!({
-                            "expression": "window.scrollBy(0, 500)",
+                            "expression": format!("window.scrollBy(0, {px})"),
                             "returnByValue": true,
                         }))
                         .await?;
-                    "Scrolled down".to_string()
+                    format!("Scrolled down {px}px")
                 }
                 "up" => {
                     let _: serde_json::Value = client
                         .call("Runtime.evaluate", json!({
-                            "expression": "window.scrollBy(0, -500)",
+                            "expression": format!("window.scrollBy(0, -{px})"),
                             "returnByValue": true,
                         }))
                         .await?;
-                    "Scrolled up".to_string()
+                    format!("Scrolled up {px}px")
                 }
                 uid => {
                     let uid_map = get_uid_map(&store, &cli.browser, &cli.page);

@@ -11,11 +11,11 @@ pub struct ConsoleEntry {
 }
 
 /// JS snippet that monkey-patches console.log/warn/error/info and captures
-/// unhandled errors + promise rejections into `window.__chrome-agent_console`.
+/// unhandled errors + promise rejections into `window.__chrome_agent_console`.
 const INTERCEPTOR_JS: &str = r"
-    if (!window.__chrome-agent_console_installed) {
-    window.__chrome-agent_console_installed = true;
-    window.__chrome-agent_console = window.__chrome-agent_console || [];
+    if (!window.__chrome_agent_console_installed) {
+    window.__chrome_agent_console_installed = true;
+    window.__chrome_agent_console = window.__chrome_agent_console || [];
     const __origConsole = {
         log: console.log.bind(console),
         warn: console.warn.bind(console),
@@ -24,30 +24,30 @@ const INTERCEPTOR_JS: &str = r"
     };
     ['log','warn','error','info'].forEach(level => {
         console[level] = (...args) => {
-            window.__chrome-agent_console.push({
+            window.__chrome_agent_console.push({
                 level,
                 message: args.map(a => typeof a === 'object' ? JSON.stringify(a) : String(a)).join(' '),
                 timestamp: Date.now(),
             });
-            if (window.__chrome-agent_console.length > 200) window.__chrome-agent_console.shift();
+            if (window.__chrome_agent_console.length > 200) window.__chrome_agent_console.shift();
             __origConsole[level](...args);
         };
     });
     window.addEventListener('error', (e) => {
-        window.__chrome-agent_console.push({
+        window.__chrome_agent_console.push({
             level: 'exception',
             message: e.message + (e.filename ? ' at ' + e.filename + ':' + e.lineno : ''),
             timestamp: Date.now(),
         });
     });
     window.addEventListener('unhandledrejection', (e) => {
-        window.__chrome-agent_console.push({
+        window.__chrome_agent_console.push({
             level: 'exception',
             message: 'Unhandled rejection: ' + String(e.reason),
             timestamp: Date.now(),
         });
     });
-    } // end guard: __chrome-agent_console_installed
+    } // end guard: __chrome_agent_console_installed
 ";
 
 /// Inject the console interceptor into the page.
@@ -67,7 +67,7 @@ pub async fn inject(client: &CdpClient) {
 
     // Bootstrap on the current page (guard prevents double-init)
     let guarded = format!(
-        "if (!window.__chrome-agent_console) {{ {INTERCEPTOR_JS} }}"
+        "if (!window.__chrome_agent_console) {{ {INTERCEPTOR_JS} }}"
     );
     let _ = client
         .send(
@@ -89,7 +89,7 @@ pub async fn run(
         .call(
             "Runtime.evaluate",
             json!({
-                "expression": "JSON.stringify(window.__chrome-agent_console || [])",
+                "expression": "JSON.stringify(window.__chrome_agent_console || [])",
                 "returnByValue": true,
             }),
         )
@@ -130,7 +130,7 @@ pub async fn run(
             .send(
                 "Runtime.evaluate",
                 json!({
-                    "expression": "window.__chrome-agent_console = []",
+                    "expression": "window.__chrome_agent_console = []",
                     "returnByValue": true,
                 }),
             )

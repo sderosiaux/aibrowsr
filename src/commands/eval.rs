@@ -3,11 +3,33 @@ use serde_json::{json, Value};
 use crate::cdp::client::CdpClient;
 use crate::cdp::types::EvaluateResult;
 
+/// Wrap the expression in a block scope `{ ... }` when it contains top-level
+/// `const` or `let` declarations so that repeated `eval` calls don't fail with
+/// "Identifier already declared".  V8's completion-value semantics mean the
+/// block still returns the value of its last expression statement.
+fn maybe_block_scope(expression: &str) -> std::borrow::Cow<str> {
+    let t = expression.trim();
+    let has_declaration = t.starts_with("const ")
+        || t.starts_with("let ")
+        || t.contains("\nconst ")
+        || t.contains("\nlet ")
+        || t.contains(";const ")
+        || t.contains("; const ")
+        || t.contains(";let ")
+        || t.contains("; let ");
+    if has_declaration {
+        std::borrow::Cow::Owned(format!("{{\n{t}\n}}"))
+    } else {
+        std::borrow::Cow::Borrowed(expression)
+    }
+}
+
 /// Evaluate JS and return the raw `serde_json::Value` (for JSON mode).
 pub async fn run_raw(
     client: &CdpClient,
     expression: &str,
 ) -> Result<Value, crate::BoxError> {
+    let expression = maybe_block_scope(expression);
     let result: EvaluateResult = client
         .call(
             "Runtime.evaluate",
@@ -39,6 +61,7 @@ pub async fn run(
     client: &CdpClient,
     expression: &str,
 ) -> Result<String, crate::BoxError> {
+    let expression = maybe_block_scope(expression);
     let result: EvaluateResult = client
         .call(
             "Runtime.evaluate",
