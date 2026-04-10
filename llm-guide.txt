@@ -1,11 +1,12 @@
 LLM USAGE GUIDE:
-  Workflow: inspect -> read uids -> act (click/fill) -> inspect again.
+  Workflow: inspect -> read uids -> act (click/fill/select/check) -> inspect again.
   Headless by default. Add --stealth for bot-protected sites. Use --json for structured output.
 
   Quick start:
     chrome-agent goto https://example.com --inspect
     chrome-agent click n12 --inspect
     chrome-agent fill --uid n20 "hello@example.com"
+    chrome-agent select --uid n15 "California"
     chrome-agent read                              # article content (Readability)
     chrome-agent eval "document.title"
 
@@ -30,11 +31,35 @@ LLM USAGE GUIDE:
     chrome-agent fill --uid n20 "value"                 # fill by uid
     chrome-agent fill --selector "input[name=q]" "val" # fill by CSS selector
 
+  Dropdowns:
+    chrome-agent select --uid n15 "Option text"        # select by value or visible text
+    chrome-agent select --selector "#country" "France" # by CSS selector
+
+  Checkboxes and radios (idempotent):
+    chrome-agent check n20                              # ensure checked (no-op if already)
+    chrome-agent uncheck n20                            # ensure unchecked (no-op if already)
+
+  File upload:
+    chrome-agent upload --uid n30 /path/to/file.pdf    # by uid
+    chrome-agent upload --selector "input[type=file]" /path/to/file.pdf
+
+  Double-click:
+    chrome-agent dblclick n42                           # by uid (also --selector, --xy)
+
+  Drag and drop:
+    chrome-agent drag n10 n20                           # drag from uid to uid
+
+  Iframes:
+    chrome-agent frame "#payment-iframe"               # switch to iframe context
+    chrome-agent inspect                                # see iframe content
+    chrome-agent frame main                             # switch back to main page
+
   Inspection + filtering:
     chrome-agent inspect                               # full accessibility tree
     chrome-agent inspect --max-depth 2                 # limit depth (saves tokens)
     chrome-agent inspect --filter "button,link"        # only these roles (flat list)
     chrome-agent inspect --uid n50                     # subtree only
+    chrome-agent inspect --filter "link" --urls        # links with resolved href URLs
     chrome-agent inspect --filter "article" --scroll --limit 50  # infinite scroll (X.com, feeds)
 
   Content extraction (choose the right tool):
@@ -43,21 +68,26 @@ LLM USAGE GUIDE:
     chrome-agent text --selector "main" --truncate 500 # visible text of CSS-matched element
     chrome-agent text                                  # full page innerText (verbose)
     chrome-agent extract                                # auto-detect repeating data (tables, cards, lists)
-    chrome-agent extract --scroll                      # scroll first for lazy-loaded pages (YouTube, Pinterest)
+    chrome-agent extract --scroll                      # scroll first for lazy-loaded pages
     chrome-agent extract --a11y --scroll --limit 20    # React SPAs (X.com) -- uses a11y tree, not DOM
     chrome-agent eval "JSON.stringify(...)"            # structured data via JS
     chrome-agent eval --selector "h1" "el.textContent" # eval scoped to a CSS element (el = matched)
     chrome-agent network --filter "api" --body         # intercept API responses directly
     chrome-agent console --level error                 # see JS errors from the page
 
-  Network capture ("Readability for APIs"):
+  Network capture and blocking:
     chrome-agent network                               # resources already loaded (stealth-safe)
     chrome-agent network --filter "graphql" --body     # filter + response bodies
     chrome-agent network --live 5 --body               # capture live traffic for 5 seconds
+    chrome-agent network --abort "*tracking*" --live 30 # block requests matching pattern
 
   Console capture (stealth-safe):
     chrome-agent console                               # all messages
     chrome-agent console --level error                 # errors + exceptions only
+
+  Batch mode (execute multiple commands at once):
+    echo '[{"cmd":"goto","url":"https://example.com"},{"cmd":"inspect"},{"cmd":"click","uid":"n12"}]' | chrome-agent batch
+    # Returns one JSON line per command. Faster than separate CLI calls.
 
   Pipe mode (persistent connection, 10x faster):
     echo '{"cmd":"goto","url":"https://example.com","inspect":true}' | chrome-agent pipe
@@ -66,7 +96,8 @@ LLM USAGE GUIDE:
   Navigation:
     chrome-agent goto https://example.com              # navigate
     chrome-agent goto https://spa.com --wait-for "main" # wait for selector after nav
-    chrome-agent back                                  # history.back()
+    chrome-agent back                                  # history back
+    chrome-agent forward                               # history forward
     chrome-agent scroll down                           # scroll page
     chrome-agent wait text "Success"                   # wait for content
 
@@ -90,9 +121,13 @@ LLM USAGE GUIDE:
   Important tips:
     - Use --stealth on sites with bot protection (Cloudflare, Turnstile).
     - UIDs (n47, n123) are stable across inspects on the same page.
-    - After SPA navigation (back, click that triggers route change), re-inspect — UIDs change.
+    - After SPA navigation (back, forward, click that triggers route change), re-inspect — UIDs change.
     - For SPA product pages, prefer `goto <direct-url>` over `click` (avoids modal routing).
-    - Use `read` for articles/blogs, `text --selector` for scoped extraction, `eval` for structured data.
+    - Use `read` for articles, `text --selector` for scoped extraction, `eval` for structured data.
     - Prefer inspect over screenshot (~50 vs ~100K tokens).
+    - Use --urls on inspect to get link destinations before deciding which to click.
+    - check/uncheck are idempotent — prefer over click for checkboxes.
+    - select matches by option value first, then by visible text.
+    - After `frame <selector>`, re-inspect to get iframe UIDs. `frame main` to return.
     - --max-depth works on goto/click/fill --inspect too (not just standalone inspect).
     - --filter gives a flat list — great for finding interactive elements quickly.
