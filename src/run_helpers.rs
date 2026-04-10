@@ -179,6 +179,18 @@ pub fn error_hint(msg: &str) -> Option<&'static str> {
         Some("JS error in page context. Check expression syntax. Use --selector to scope to an element.")
     } else if msg.contains("dispatcher task exited") || msg.contains("transport closed") {
         Some("Browser connection lost. Try running the command again.")
+    } else if msg.contains("not an <iframe>") || msg.contains("not an <IFRAME>") {
+        Some("Only <iframe> is supported. For <frame>/<frameset>, use eval to access frame content.")
+    } else if msg.contains("No child frame found") {
+        Some("Iframe not found. Check the selector matches an <iframe> element.")
+    } else if msg.contains("not a <select>") {
+        Some("Element is not a <select>. For custom dropdowns, click to open then click the option.")
+    } else if msg.contains("No option matching") {
+        Some("No dropdown option matched. Use inspect --uid to check available options, or try the visible text.")
+    } else if msg.contains("File not found") {
+        Some("Check the file path exists on disk.")
+    } else if msg.contains("expected a JSON array") {
+        Some("Batch expects a JSON array of commands on stdin: [{\"cmd\":\"inspect\"}, ...]")
     } else {
         None
     }
@@ -418,6 +430,13 @@ mod tests {
         assert!(error_hint("Provide a uid").is_some());
         assert!(error_hint("Evaluation error: TypeError: foo").is_some());
         assert!(error_hint("dispatcher task exited").is_some());
+        // v0.4.0 new command hints
+        assert!(error_hint("Element is not an <iframe>").is_some());
+        assert!(error_hint("No child frame found for selector").is_some());
+        assert!(error_hint("Element is not a <select>").is_some());
+        assert!(error_hint("No option matching: foo").is_some());
+        assert!(error_hint("File not found: /tmp/nope").is_some());
+        assert!(error_hint("batch: expected a JSON array").is_some());
         // Unknown errors should return None
         assert!(error_hint("something random").is_none());
     }

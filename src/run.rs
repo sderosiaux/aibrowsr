@@ -309,7 +309,8 @@ pub async fn run(cli: Cli) -> Result<(), BoxError> {
             }
         }
 
-        Command::Forward => {
+        Command::Forward { inspect, max_depth } => {
+            let depth = max_depth.or(cli.max_depth);
             let history: serde_json::Value = client
                 .call("Page.getNavigationHistory", json!({}))
                 .await?;
@@ -317,10 +318,11 @@ pub async fn run(cli: Cli) -> Result<(), BoxError> {
             let entries = history.get("entries").and_then(serde_json::Value::as_array);
             let entry_count = entries.map_or(0, Vec::len) as i64;
             if current_index >= entry_count - 1 {
+                let msg = "Already at last history entry".to_string();
                 if json_mode {
-                    json_output(&json!({"ok": true, "title": "", "message": "Already at last history entry"}));
+                    json_output(&json!({"ok": true, "title": "", "message": msg}));
                 } else {
-                    println!("Already at last history entry");
+                    println!("{msg}");
                 }
             } else {
                 let next_entry_id = entries
@@ -334,11 +336,8 @@ pub async fn run(cli: Cli) -> Result<(), BoxError> {
                     .call("Runtime.evaluate", json!({"expression": "document.title", "returnByValue": true}))
                     .await?;
                 let title_str = title.result.value.as_ref().and_then(|v| v.as_str()).unwrap_or("");
-                if json_mode {
-                    json_output(&json!({"ok": true, "title": title_str}));
-                } else {
-                    println!("Navigated forward — {title_str}");
-                }
+                let msg = format!("Navigated forward — {title_str}");
+                output_action(&client, &mut store, &cli.browser, &cli.page, &target_id, msg, inspect, depth, json_mode).await?;
             }
         }
 
@@ -397,8 +396,8 @@ pub async fn run(cli: Cli) -> Result<(), BoxError> {
             if uid.is_none() && selector.is_none() {
                 return Err("Provide a uid or --selector.".into());
             }
-            let msg = if selector.is_some() {
-                return Err("check --selector not yet supported. Use --uid instead.".into());
+            let msg = if let Some(ref sel) = selector {
+                crate::element::set_checked_selector(&client, sel, true).await?
             } else {
                 let uid = uid.as_ref().unwrap();
                 let uid_map = get_uid_map(&store, &cli.browser, &cli.page);
@@ -412,8 +411,8 @@ pub async fn run(cli: Cli) -> Result<(), BoxError> {
             if uid.is_none() && selector.is_none() {
                 return Err("Provide a uid or --selector.".into());
             }
-            let msg = if selector.is_some() {
-                return Err("uncheck --selector not yet supported. Use --uid instead.".into());
+            let msg = if let Some(ref sel) = selector {
+                crate::element::set_checked_selector(&client, sel, false).await?
             } else {
                 let uid = uid.as_ref().unwrap();
                 let uid_map = get_uid_map(&store, &cli.browser, &cli.page);
@@ -422,7 +421,8 @@ pub async fn run(cli: Cli) -> Result<(), BoxError> {
             output_action(&client, &mut store, &cli.browser, &cli.page, &target_id, msg, inspect, depth, json_mode).await?;
         }
 
-        Command::Upload { files, uid, selector } => {
+        Command::Upload { files, uid, selector, inspect, max_depth } => {
+            let depth = max_depth.or(cli.max_depth);
             if uid.is_none() && selector.is_none() {
                 return Err("Provide --uid or --selector to identify the file input.".into());
             }
@@ -434,11 +434,7 @@ pub async fn run(cli: Cli) -> Result<(), BoxError> {
                 let uid_map = get_uid_map(&store, &cli.browser, &cli.page);
                 commands::upload::run(&client, &uid_map, uid, &files).await?
             };
-            if json_mode {
-                json_output(&json!({"ok": true, "message": msg}));
-            } else {
-                println!("{msg}");
-            }
+            output_action(&client, &mut store, &cli.browser, &cli.page, &target_id, msg, inspect, depth, json_mode).await?;
         }
 
         Command::Drag { from, to, inspect, max_depth } => {
@@ -721,15 +717,16 @@ pub async fn run(cli: Cli) -> Result<(), BoxError> {
                 buf
             };
             let cmds = commands::batch::parse_commands(&input)?;
+            let mut results = Vec::with_capacity(cmds.len());
             for cmd in &cmds {
                 let response = crate::pipe_dispatch::dispatch_single(
                     &client, &browser_client, &mut store,
                     &cli.browser, &cli.page, &target_id,
                     cli.timeout, cli.max_depth, cmd,
                 ).await;
-                let line = serde_json::to_string(&response).unwrap_or_default();
-                println!("{line}");
+                results.push(response);
             }
+            json_output(&json!({"ok": true, "results": results}));
         }
 
         // Already handled above

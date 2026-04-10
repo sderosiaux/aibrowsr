@@ -763,6 +763,42 @@ pub async fn set_checked(
     Ok(format!("{} uid={uid}", if desired { "Checked" } else { "Unchecked" }))
 }
 
+/// Idempotent check/uncheck by CSS selector.
+pub async fn set_checked_selector(
+    client: &CdpClient,
+    selector: &str,
+    desired: bool,
+) -> Result<String, ElementError> {
+    let sel_json = serde_json::to_string(selector).unwrap_or_default();
+    let desired_js = if desired { "true" } else { "false" };
+    let js = format!(
+        r"(() => {{
+            const el = document.querySelector({sel_json});
+            if (!el) throw new Error('No element matches selector: ' + {sel_json});
+            const current = !!el.checked;
+            if (current === {desired_js}) return 'already';
+            el.click();
+            return 'toggled';
+        }})()"
+    );
+    let result: serde_json::Value = client
+        .call("Runtime.evaluate", json!({"expression": js, "returnByValue": true}))
+        .await
+        .map_err(|e| ElementError::Action(format!("set_checked_selector failed: {e}")))?;
+
+    check_js_exception(&result)?;
+    let action = result.get("result")
+        .and_then(|r| r.get("value"))
+        .and_then(|v| v.as_str())
+        .unwrap_or("toggled");
+    let state_word = if desired { "checked" } else { "unchecked" };
+    if action == "already" {
+        Ok(format!("Already {state_word} selector '{selector}'"))
+    } else {
+        Ok(format!("{} selector '{selector}'", if desired { "Checked" } else { "Unchecked" }))
+    }
+}
+
 // ---------------------------------------------------------------------------
 // File upload
 // ---------------------------------------------------------------------------

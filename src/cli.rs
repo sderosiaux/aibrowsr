@@ -159,7 +159,14 @@ pub enum Command {
     Back,
 
     /// Navigate forward in browser history
-    Forward,
+    Forward {
+        /// Inspect page after navigation
+        #[arg(long)]
+        inspect: bool,
+        /// Max depth for inspect output
+        #[arg(long)]
+        max_depth: Option<usize>,
+    },
 
     /// Double-click an element by uid, CSS selector, or coordinates
     Dblclick {
@@ -237,6 +244,12 @@ pub enum Command {
         /// CSS selector of the file input
         #[arg(long)]
         selector: Option<String>,
+        /// Inspect page after uploading
+        #[arg(long)]
+        inspect: bool,
+        /// Max depth for inspect output
+        #[arg(long)]
+        max_depth: Option<usize>,
     },
 
     /// Drag an element to another element
