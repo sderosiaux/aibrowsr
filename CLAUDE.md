@@ -1,7 +1,7 @@
-# chrome-agent v0.2.5
+# chrome-agent v0.4.0
 
 Single Rust binary for browser automation via CDP. Built for AI agents.
-~6.2K lines Rust, zero runtime dependencies, 2.9 MB binary.
+~7.3K lines Rust, zero runtime dependencies, 3 MB binary.
 
 ## Architecture
 
@@ -11,16 +11,19 @@ CLI (clap) → CDP Client (WebSocket) → Chrome
 
 | Module | Role |
 |--------|------|
+| `src/cli.rs` | CLI definition: `Cli` struct, `Command` enum (37 commands) |
+| `src/run.rs` | CLI command dispatch (match on Command enum) |
+| `src/pipe.rs` | Pipe mode: persistent connection, JSON stdin/stdout |
+| `src/pipe_dispatch.rs` | Pipe/batch command dispatchers (shared by pipe + batch + CLI batch) |
 | `src/cdp/` | WebSocket transport, message correlation, CDP types |
-| `src/commands/` | 27 commands: goto, click, fill, inspect, eval, text, read, extract, diff, network, console, wait, screenshot, tabs... |
-| `src/element.rs` | uid/selector/coordinate resolution → CDP input dispatch, JS click fallback |
+| `src/commands/` | 23 command modules: goto, click, fill, inspect, eval, text, read, extract, diff, network, console, wait, screenshot, tabs, dblclick, select, check, upload, drag, frame, batch... |
+| `src/element.rs` | uid/selector/coordinate resolution → CDP input dispatch, JS click fallback, dblclick, select, check, upload, drag |
 | `src/element_ref.rs` | ElementRef abstraction (decouples from CDP internals) |
 | `src/snapshot.rs` | Accessibility tree → compact text with stable uids (backendNodeId), role filter + aliases |
 | `src/truncate.rs` | UTF-8 safe string truncation (prevents panics on multi-byte chars) |
 | `src/session.rs` | JSON session persistence (~/.chrome-agent/sessions.json, 0600 perms, conflict detection) |
 | `src/browser.rs` | Chrome launch, auto-discovery, stale DevToolsActivePort cleanup, profile management |
-| `src/pipe.rs` | Pipe mode: persistent connection, JSON stdin/stdout, 25 command dispatchers |
-| `src/setup.rs` | 7 stealth patches (shared by main.rs + pipe.rs) |
+| `src/setup.rs` | 7 stealth patches (shared by run.rs + pipe.rs) |
 | `src/run_helpers.rs` | Shared output/error handling, connect_page with 5x retry |
 | `src/daemon.rs` | Optional micro-daemon (Unix only), heartbeat, crash recovery |
 | `vendor/Readability.js` | Mozilla Readability (90KB, MIT) embedded via include_str! |
@@ -68,6 +71,17 @@ cargo clippy -- -D warnings  # zero warnings enforced in CI
 - **`extract --scroll`** — scrolls page before extracting, uses `MutationObserver` to wait for lazy-loaded content. Uses `Math.max(body, documentElement)` for scroll height (YouTube fix). Max 10 iterations.
 - **Parallel agent isolation** — `--browser <name>` per agent. Session conflict detection via mtime.
 - **connect_page with 5x retry** — page-level CDP connection retries with 300ms backoff
+- **`forward`** — symmetric to `back`, uses `Page.getNavigationHistory` + `Page.navigateToHistoryEntry`
+- **`dblclick`** — 4 mouse events (pressed/released x2 with click_count 1 then 2), JS fallback via `dblclick` MouseEvent
+- **`select`** — matches by `option.value` first, then by `option.text.trim()`. Dispatches `change` event.
+- **`check`/`uncheck`** — idempotent: queries `this.checked` via callFunctionOn, clicks only if state differs
+- **`upload`** — validates file paths exist before CDP call. Uses `DOM.setFileInputFiles` with backendNodeId (uid) or nodeId (selector)
+- **`drag`** — 5-step linear interpolation between source/destination centers, 16ms between moves for realism
+- **`batch`** — CLI reads JSON array from stdin, dispatches sequentially via `pipe_dispatch::dispatch_single`. Pipe mode uses `"commands"` array field.
+- **`frame`** — uses `Page.getFrameTree` to find child frames, `Page.createIsolatedWorld` to get execution context. Only `<iframe>`, not `<frame>`/`<frameset>`.
+- **`inspect --urls`** — post-processes snapshot text, resolves href on link nodes via `DOM.resolveNode` + `Runtime.callFunctionOn`
+- **`network --abort`** — enables `Fetch` domain with URL pattern, intercepts `Fetch.requestPaused`, calls `Fetch.failRequest` with `BlockedByClient`
+- **File split** — main.rs (72 lines) → cli.rs (450), run.rs (745), pipe_dispatch.rs (608). All files under 1000 lines (hook-enforced).
 
 ## Gotchas
 
@@ -86,6 +100,11 @@ cargo clippy -- -D warnings  # zero warnings enforced in CI
 - Parallel agents sharing `--browser default` corrupt each other's sessions. Use `--browser <unique>`.
 - Console interceptor is guarded against re-injection (`__chrome-agent_console_installed`).
 - `press Enter` needs `windowsVirtualKeyCode: 13` + `text: "\r"` for form submission.
+- `drag` uses CDP mouse events (mousePressed/mouseMoved/mouseReleased). Works with mousedown-based DnD libs (Sortable.js, React DnD mouse backend). Does NOT work with HTML5 Drag and Drop API (requires dragstart/dragover/drop events).
+- `frame` only supports `<iframe>`, not legacy `<frameset>`/`<frame>`. Error message is clear.
+- `batch` CLI mode: uids change between invocations (new CDP connection = new backendNodeIds). Use pipe mode for uid-stable multi-command flows.
+- `select` on non-`<select>` element throws "Element is not a \<select\>". Custom dropdowns (React, MUI) need click + click approach.
+- `network --abort` is blocking: it runs for `--live N` seconds intercepting requests, then disables Fetch domain. Start abort before navigating to the page.
 
 ## Linting
 

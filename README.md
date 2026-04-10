@@ -24,7 +24,20 @@
 >
 > You don't need to read this README. Your agent does. Install it, run `chrome-agent --help`, and let the LLM figure it out. The CLI embeds its own usage guide, every error comes with a hint for the next action, and `--json` mode outputs structured data an agent can parse without you writing a single adapter. This page is here because GitHub expects one.
 
-Playwright returns 2,000 tokens of raw HTML. chrome-agent returns 50 tokens of accessibility tree with stable element IDs. No CSS selectors to write, no DOM to parse.
+## Philosophy
+
+Every token your agent spends understanding a page is a token it doesn't spend reasoning about the task. chrome-agent is built around one idea: **minimize the tokens between "what does this page look like?" and "what should I do next?"**
+
+This means:
+
+- **Accessibility tree over DOM.** Playwright returns ~2,000 tokens of raw HTML. chrome-agent returns ~50 tokens of a11y tree with stable element IDs. No CSS selectors to write, no DOM to parse.
+- **One binary, zero runtime.** 3 MB Rust binary. No Node.js, no npm, no Playwright runtime. `npx chrome-agent` just works.
+- **Action + observation in one call.** `--inspect` on any action command returns the page state after the action. One round-trip instead of two.
+- **Errors are instructions.** Every error includes a `hint` field telling the agent what to do next. `{"ok":false, "error":"...", "hint":"run inspect"}`.
+- **Stealth by default intent.** 7 CDP patches including the detection vector nobody talks about (`Runtime.enable`). Connect to real Chrome for the hardest protections.
+- **Content extraction without selectors.** `read` for articles, `extract` for repeating data, `network` for API payloads. The agent never writes CSS selectors.
+
+This is not a general-purpose browser testing framework. It's a tool that makes an LLM effective at browsing the web.
 
 ```bash
 chrome-agent goto news.ycombinator.com --inspect
@@ -108,35 +121,71 @@ chrome-agent screenshot
 
 ## Commands
 
+### Navigation
+
 | Command | What it does |
 |---------|------------|
 | `goto <url> [--inspect] [--max-depth N]` | Navigate. Auto-prefixes `https://` if missing. |
-| `inspect [--verbose] [--max-depth N] [--uid nN] [--filter "role,role"] [--scroll] [--limit N]` | a11y tree with UIDs. `--scroll --limit` for infinite scroll. |
+| `back` | History back. |
+| `forward` | History forward. |
+| `close [--purge]` | Stop browser. `--purge` deletes cookies/profile. |
+
+### Inspection
+
+| Command | What it does |
+|---------|------------|
+| `inspect [--verbose] [--max-depth N] [--uid nN] [--filter "role,role"] [--scroll] [--limit N] [--urls]` | a11y tree with UIDs. `--scroll --limit` for infinite scroll. `--urls` resolves href on links. |
+| `diff` | What changed since last inspect. |
+| `screenshot [--filename name]` | Screenshot to file. |
+| `tabs` | List open tabs. |
+
+### Interaction
+
+| Command | What it does |
+|---------|------------|
 | `click <uid> [--inspect]` | Click by uid. Falls back to JS `.click()` when no box model. |
 | `click --selector "css" [--inspect]` | Click by CSS selector. |
 | `click --xy 100,200` | Click by coordinates. |
+| `dblclick <uid> [--inspect]` | Double-click by uid, `--selector`, or `--xy`. |
 | `fill --uid <uid> <value> [--inspect]` | Fill input by uid. |
 | `fill --selector "css" <value>` | Fill by selector. |
 | `fill-form <uid=val>...` | Batch fill. |
-| `read [--html] [--truncate N]` | Article extraction via Mozilla Readability. |
-| `text [uid] [--selector "css"] [--truncate N]` | Visible text from page or element. |
-| `eval <expression> [--selector "css"]` | JS in page context. `el` = matched element. |
-| `extract [--selector "css"] [--limit N] [--scroll] [--a11y]` | Auto-detect repeating data. `--a11y` for React SPAs (X.com). |
-| `network [--filter "pattern"] [--body] [--live N]` | Network requests and API responses. |
-| `console [--level error] [--clear]` | console.log/warn/error + JS exceptions. |
-| `pipe` | Persistent JSON stdin/stdout connection. |
-| `wait <text\|url\|selector> <pattern>` | Wait for a condition. |
+| `select --uid <uid> <value>` | Select dropdown option by value or visible text. |
+| `select --selector "css" <value>` | Select by CSS selector. |
+| `check <uid>` | Ensure checkbox/radio is checked. Idempotent. |
+| `uncheck <uid>` | Ensure checkbox/radio is unchecked. Idempotent. |
+| `upload --uid <uid> <file>...` | Upload file(s) to a file input. |
+| `upload --selector "css" <file>...` | Upload by CSS selector. |
+| `drag <from-uid> <to-uid>` | Drag element to another element. |
 | `type <text> [--selector "css"]` | Type into focused element. |
 | `press <key>` | Enter, Tab, Escape, etc. |
 | `scroll <down\|up\|uid>` | Scroll page or element into view. |
 | `hover <uid>` | Hover. |
-| `back` | History back. |
-| `screenshot [--filename name]` | Screenshot to file. |
-| `tabs` | List open tabs. |
-| `diff` | What changed since last inspect. |
-| `close [--purge]` | Stop browser. `--purge` deletes cookies/profile. |
-| `status` | Session info. |
-| `stop` | Stop daemon. |
+| `wait <text\|url\|selector> <pattern>` | Wait for a condition. |
+
+### Content extraction
+
+| Command | What it does |
+|---------|------------|
+| `read [--html] [--truncate N]` | Article extraction via Mozilla Readability. |
+| `text [uid] [--selector "css"] [--truncate N]` | Visible text from page or element. |
+| `eval <expression> [--selector "css"]` | JS in page context. `el` = matched element. |
+| `extract [--selector "css"] [--limit N] [--scroll] [--a11y]` | Auto-detect repeating data. `--a11y` for React SPAs (X.com). |
+
+### Monitoring
+
+| Command | What it does |
+|---------|------------|
+| `network [--filter "pattern"] [--body] [--live N] [--abort "pattern"]` | Network requests and API responses. `--abort` blocks matching requests. |
+| `console [--level error] [--clear]` | console.log/warn/error + JS exceptions. |
+
+### Advanced
+
+| Command | What it does |
+|---------|------------|
+| `frame <selector\|main>` | Switch execution context to an iframe (or back to main). |
+| `batch` | Execute multiple commands from a JSON array on stdin. |
+| `pipe` | Persistent JSON stdin/stdout connection. |
 
 ## Global flags
 
@@ -191,6 +240,49 @@ chrome-agent text --selector "[role=main]" --truncate 1000
 chrome-agent network --filter "api" --body
 ```
 
+## Forms: dropdowns, checkboxes, file uploads
+
+```bash
+# Select dropdown by value or visible text
+chrome-agent select --uid n15 "California"
+
+# Idempotent checkbox control
+chrome-agent check n20     # no-op if already checked
+chrome-agent uncheck n20   # no-op if already unchecked
+
+# File upload
+chrome-agent upload --uid n30 /path/to/document.pdf
+
+# Double-click (text selection, special controls)
+chrome-agent dblclick n42
+```
+
+## Iframes
+
+```bash
+# Switch into an iframe
+chrome-agent frame "#payment-iframe"
+chrome-agent inspect    # see iframe content
+chrome-agent fill --selector "input[name=card]" "4242424242424242"
+
+# Switch back to main page
+chrome-agent frame main
+```
+
+## Batch mode
+
+Execute a sequence of commands from stdin without per-command process startup:
+
+```bash
+echo '[
+  {"cmd":"goto","url":"https://example.com"},
+  {"cmd":"inspect","filter":"button"},
+  {"cmd":"click","uid":"n42"}
+]' | chrome-agent batch
+```
+
+Each command produces one JSON line. About 10x faster than spawning a process per command.
+
 ## Stealth
 
 `--stealth` patches 7 automation fingerprints via CDP:
@@ -233,7 +325,7 @@ chrome-agent --copy-cookies goto github.com/notifications --inspect
 
 Your real Chrome is not affected.
 
-## Network and console capture
+## Network capture and blocking
 
 ```bash
 # Resources already loaded (stealth-safe, uses Performance API)
@@ -241,6 +333,9 @@ chrome-agent network --filter "api"
 
 # Live traffic with response bodies
 chrome-agent network --live 5 --body --filter "graphql"
+
+# Block tracking/ads (uses Fetch domain interception)
+chrome-agent network --abort "*tracking*" --live 30
 
 # Console output
 chrome-agent console --level error    # errors + exceptions only
@@ -272,6 +367,16 @@ chrome-agent --json eval "1+1"
 # Errors exit 0 so agents can always parse stdout:
 chrome-agent --json click n99
 # {"ok":false,"error":"Element uid=n99 not found.","hint":"Run 'chrome-agent inspect'"}
+```
+
+## Inspect with link URLs
+
+When deciding which link to click, the agent often needs the URL, not just the text:
+
+```bash
+chrome-agent inspect --urls --filter link
+# uid=n82 link "Pricing" url="https://example.com/pricing"
+# uid=n97 link "Docs" url="https://docs.example.com"
 ```
 
 ## Multi-tab and parallel agents
@@ -310,22 +415,32 @@ Claude Code permissions:
 
 ## Comparison
 
-| | chrome-agent | dev-browser | chrome-devtools-mcp | Playwright MCP |
-|---|---|---|---|---|
-| Language | Rust | Rust + Node.js | TypeScript | TypeScript |
-| Runtime deps | none | Node + npm + Playwright + QuickJS | Node + Puppeteer | Node + Playwright |
-| Binary size | 3 MB | 3 MB CLI + 200 MB deps | npm package | npm package |
-| CLI startup | ~10ms (session reuse) | ~500ms | N/A (MCP) | N/A (MCP) |
-| Element targeting | uid + selector + coords | selectors + snapshotForAI | uid (sequential) | selectors |
-| UID stability | backendNodeId (stable) | N/A | sequential (reassigned) | N/A |
-| Action + observe | `--inspect` (1 call) | batched script | 1 call per action | 1 call per action |
-| Stealth | 7 CDP patches | No | No | No |
-| Reader mode | `read` (Readability) | No | No | No |
-| Network capture | retroactive + live | No | No | metadata only |
-| Data extraction | `extract` (auto-detect) | No | No | No |
-| Console capture | stealth-safe | No | yes | No |
-| Pipe mode | yes | No | No | No |
-| Code | ~6.2K lines | ~76K lines | ~12K lines | Playwright |
+|  | chrome-agent | agent-browser (Vercel) | Playwright MCP |
+|---|---|---|---|
+| Language | Rust | Rust | TypeScript |
+| Binary | 3 MB, zero runtime | 3 MB CLI + dashboard + cloud providers | Node + Playwright |
+| Startup | ~10ms (session reuse) | daemon (fast after first) | cold start |
+| Token efficiency | ~50 tokens/page (a11y noise filtering) | ~200 tokens/page (a11y tree) | ~2,000 tokens (HTML) |
+| UID stability | `backendNodeId` (stable across inspects) | sequential `@e1, @e2` (reassigned per snapshot) | N/A (selectors) |
+| Action + observe | `--inspect` flag (1 call) | separate snapshot call | separate call |
+| Stealth | 7 native CDP patches | delegated to cloud providers | none |
+| Reader mode | `read` (Readability.js) | none | none |
+| Data extraction | `extract` (auto-detect repeating data) | none | none |
+| Link URL resolution | `inspect --urls` | `snapshot -u` | N/A |
+| Dropdowns | `select` | `select` | via selectors |
+| Checkboxes | `check`/`uncheck` (idempotent) | `check`/`uncheck` | via selectors |
+| File upload | `upload` | `upload` | via selectors |
+| Drag and drop | `drag` | `drag` | via selectors |
+| Annotated screenshots | not yet | `screenshot --annotate` | not yet |
+| Live dashboard | no (lean) | yes (Next.js) | no |
+| Cloud providers | no (`--connect` to anything) | 5 built-in | no |
+| iOS/Safari | no | yes (WebDriver) | no |
+| Network blocking | `network --abort` | `network route --abort` | no |
+| Iframe switching | `frame` | `frame` | via selectors |
+| Batch execution | `batch` (JSON stdin) | `batch` (JSON or quoted) | N/A |
+| AI chat built-in | no (the agent IS the LLM) | yes (AI Gateway) | N/A |
+| Codebase | ~7.3K lines | ~40K lines | Playwright |
+| Design goal | minimal tokens, maximal autonomy | feature-complete platform | browser testing |
 
 ## License
 
