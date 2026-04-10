@@ -24,6 +24,24 @@
 >
 > You don't need to read this README. Your agent does. Install it, run `chrome-agent --help`, and let the LLM figure it out. The CLI embeds its own usage guide, every error comes with a hint for the next action, and `--json` mode outputs structured data an agent can parse without you writing a single adapter. This page is here because GitHub expects one.
 
+## How is this different from agent-browser?
+
+[agent-browser](https://github.com/vercel-labs/agent-browser) (Vercel) is a feature-complete browser automation platform: dashboard, cloud providers, annotated screenshots, iOS support, AI chat, auth vault, 40K lines of Rust. It's excellent.
+
+chrome-agent is the opposite bet. Instead of adding features, it removes tokens.
+
+| | chrome-agent | agent-browser |
+|---|---|---|
+| **Page snapshot** | ~50 tokens (a11y noise stripped, 66% reduction) | ~200 tokens (full a11y tree) |
+| **Element IDs** | `backendNodeId` — stable across inspects | Sequential `@e1, @e2` — reassigned every snapshot |
+| **Action + observe** | `click n12 --inspect` (1 call) | `click @e1` then `snapshot` (2 calls) |
+| **Stealth** | 7 native CDP patches (incl. `Runtime.enable` skip) | Delegated to cloud providers |
+| **Content extraction** | `read` (articles), `extract` (auto-detect lists/tables) | None built-in |
+| **Binary** | 3 MB, zero runtime | 3 MB + Next.js dashboard + cloud SDKs |
+| **Codebase** | 7K lines | 40K lines |
+
+agent-browser gives you a platform with monitoring, cloud browsers, and visual debugging. chrome-agent gives your LLM the smallest possible representation of a webpage and gets out of the way. If your agent needs a dashboard, use agent-browser. If your agent needs to spend tokens on reasoning instead of page parsing, use this.
+
 ## Philosophy
 
 Every token your agent spends understanding a page is a token it doesn't spend reasoning about the task. chrome-agent is built around one idea: **minimize the tokens between "what does this page look like?" and "what should I do next?"**
