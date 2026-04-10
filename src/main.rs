@@ -65,8 +65,6 @@ async fn main() {
                 eprintln!("hint: {hint}");
             }
         }
-        if !json_mode {
-            std::process::exit(1);
-        }
+        std::process::exit(1);
     }
 }

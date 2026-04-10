@@ -392,7 +392,7 @@ chrome-agent --json goto https://example.com --inspect
 chrome-agent --json eval "1+1"
 # {"ok":true,"result":2}
 
-# 错误也返回退出码 0，确保 Agent 始终能解析 stdout：
+# 错误返回退出码 1，但 JSON 仍在 stdout（可解析）：
 chrome-agent --json click n99
 # {"ok":false,"error":"Element uid=n99 not found.","hint":"Run 'chrome-agent inspect'"}
 ```

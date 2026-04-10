@@ -126,7 +126,7 @@ LLM USAGE GUIDE:
   JSON mode:
     chrome-agent --json goto https://example.com
     -> {"ok":true,"url":"...","title":"..."}
-    Errors: {"ok":false,"error":"...","hint":"..."} (exit 0, always parseable)
+    Errors: {"ok":false,"error":"...","hint":"..."} (exit 1, JSON still on stdout)
 
   More commands:
     chrome-agent hover n30                             # hover over element

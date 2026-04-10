@@ -165,7 +165,7 @@ chrome-agent close [--purge]
 4. **Use `read` for articles**, `text --selector` for scoped extraction, `eval` for structured data.
 5. **Prefer inspect over screenshot** — ~50 tokens vs ~100K tokens.
 6. **UIDs are stable** (n47, n123) across inspects on the same page — based on backendNodeId.
-7. **--json errors exit 0** — always parseable, check `ok` field.
+7. **--json errors exit 1** with `{"ok":false}` on stdout — parseable, check `ok` field.
 8. **--max-depth works everywhere** — on standalone inspect AND on goto/click/fill --inspect.
 9. **Use --filter** to find elements fast: `inspect --filter "button,link,textbox"`.
 10. **Use --urls** on inspect to get link destinations: `inspect --filter "link" --urls`.

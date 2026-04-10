@@ -58,7 +58,7 @@ cargo clippy -- -D warnings  # zero warnings enforced in CI
 - **JS click fallback** — when a11y reports "disabled" but DOM isn't, click falls back to `.click()`
 - **ElementRef abstraction** — session stores `{"type":"backendNode","id":N}`, ready for BiDi
 - **Noise filtering** — StaticText/InlineTextBox stripped (66% token reduction), `--filter` by role with aliases (textbox→searchbox+combobox, input→all input roles, button→menuitem)
-- **`--json` mode** — errors exit 0 with `{"ok":false}`. Agents parse stdout, not exit codes.
+- **`--json` mode** — errors exit 1 with `{"ok":false}` on stdout. Agents parse stdout for the error, exit code signals failure.
 - **Self-healing errors** — every error includes a `hint` field suggesting the next action
 - **Reader mode** — `read` injects Mozilla Readability.js for article extraction (~500 tokens vs ~15K)
 - **Content extraction hierarchy** — `read` (articles) > `extract` (repeating data) > `text --selector` (scoped) > `text` (full page) > `eval` (structured JS) > `network` (API responses)

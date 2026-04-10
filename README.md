@@ -382,7 +382,7 @@ chrome-agent --json goto https://example.com --inspect
 chrome-agent --json eval "1+1"
 # {"ok":true,"result":2}
 
-# Errors exit 0 so agents can always parse stdout:
+# Errors exit 1 but JSON is still on stdout (parseable):
 chrome-agent --json click n99
 # {"ok":false,"error":"Element uid=n99 not found.","hint":"Run 'chrome-agent inspect'"}
 ```
