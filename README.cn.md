@@ -24,7 +24,38 @@
 >
 > 你不需要读这份 README，你的 Agent 才需要。安装后运行 `chrome-agent --help`，让 LLM 自己搞定。CLI 内嵌了完整的使用指南，每条错误都附带下一步操作提示，`--json` 模式输出结构化数据，Agent 无需任何适配器即可解析。这个页面只是因为 GitHub 需要一个。
 
-Playwright 返回 2,000 个 token 的原始 HTML。chrome-agent 返回 50 个 token 的无障碍树，并带有稳定的元素 ID。无需编写 CSS 选择器，无需解析 DOM。
+## 和 agent-browser 有什么不同？
+
+[agent-browser](https://github.com/vercel-labs/agent-browser)（Vercel）是一个功能完整的浏览器自动化平台：仪表盘、云服务商、标注截图、iOS 支持、AI 对话、凭证保险库，40K 行 Rust。它很优秀。
+
+chrome-agent 是相反的策略：不是增加功能，而是减少 token。
+
+| | chrome-agent | agent-browser |
+|---|---|---|
+| **页面快照** | ~50 token（无障碍树噪音过滤，减少 66%） | ~200 token（完整无障碍树） |
+| **元素 ID** | `backendNodeId` — 跨 inspect 稳定 | 顺序 `@e1, @e2` — 每次快照重新分配 |
+| **操作 + 观察** | `click n12 --inspect`（1 次调用） | `click @e1` 然后 `snapshot`（2 次调用） |
+| **隐身模式** | 7 项原生 CDP 补丁（含 `Runtime.enable` 跳过） | 委托给云服务商 |
+| **内容提取** | `read`（文章）、`extract`（自动检测列表/表格） | 无内置功能 |
+| **二进制** | 3 MB，零运行时依赖 | 3 MB + Next.js 仪表盘 + 云 SDK |
+| **代码量** | 7K 行 | 40K 行 |
+
+agent-browser 提供带监控、云浏览器和可视化调试的平台。chrome-agent 给你的 LLM 提供最精简的网页表示，然后退出舞台。如果你的 Agent 需要仪表盘，用 agent-browser。如果你的 Agent 需要把 token 花在推理而不是解析页面上，用这个。
+
+## 设计理念
+
+Agent 花在理解页面上的每一个 token，都是它无法用来思考任务的 token。chrome-agent 围绕一个核心理念构建：**最小化从"这个页面长什么样？"到"我下一步该做什么？"之间的 token 消耗。**
+
+具体来说：
+
+- **无障碍树优于 DOM。** Playwright 返回 ~2,000 token 的原始 HTML。chrome-agent 返回 ~50 token 的无障碍树，带有稳定的元素 ID。无需 CSS 选择器，无需解析 DOM。
+- **单一二进制，零运行时。** 3 MB Rust 二进制。无 Node.js，无 npm，无 Playwright 运行时。`npx chrome-agent` 直接可用。
+- **一次调用完成操作 + 观察。** 任意操作命令加 `--inspect` 就能返回操作后的页面状态。一次往返而非两次。
+- **错误即指令。** 每个错误都包含 `hint` 字段，告诉 Agent 下一步做什么。`{"ok":false, "error":"...", "hint":"run inspect"}`。
+- **隐身优先。** 7 项 CDP 补丁，包含没人提到的检测手段（`Runtime.enable`）。最强防护场景可连接到真实 Chrome。
+- **无需选择器的内容提取。** `read` 提取文章，`extract` 提取重复数据，`network` 获取 API 响应。Agent 永远不需要写 CSS 选择器。
+
+这不是通用的浏览器测试框架，而是让 LLM 高效浏览网页的工具。
 
 ```bash
 chrome-agent goto news.ycombinator.com --inspect
@@ -108,35 +139,71 @@ chrome-agent screenshot
 
 ## 命令列表
 
+### 导航
+
 | 命令 | 功能 |
 |---------|------------|
 | `goto <url> [--inspect] [--max-depth N]` | 导航。缺少 `https://` 时自动补全。 |
-| `inspect [--verbose] [--max-depth N] [--uid nN] [--filter "role,role"] [--scroll] [--limit N]` | 带 UID 的无障碍树。`--scroll --limit` 用于无限滚动。 |
+| `back` | 浏览器后退。 |
+| `forward` | 浏览器前进。 |
+| `close [--purge]` | 停止浏览器。`--purge` 删除 cookie/配置。 |
+
+### 检查
+
+| 命令 | 功能 |
+|---------|------------|
+| `inspect [--verbose] [--max-depth N] [--uid nN] [--filter "role,role"] [--scroll] [--limit N] [--urls]` | 带 UID 的无障碍树。`--scroll --limit` 用于无限滚动。`--urls` 解析链接 href。 |
+| `diff` | 查看上次 inspect 以来的变化。 |
+| `screenshot [--filename name]` | 截图保存到文件。 |
+| `tabs` | 列出打开的标签页。 |
+
+### 交互
+
+| 命令 | 功能 |
+|---------|------------|
 | `click <uid> [--inspect]` | 通过 uid 点击。无盒模型时回退到 JS `.click()`。 |
 | `click --selector "css" [--inspect]` | 通过 CSS 选择器点击。 |
 | `click --xy 100,200` | 通过坐标点击。 |
+| `dblclick <uid> [--inspect]` | 双击。同样支持 `--selector`、`--xy`。 |
 | `fill --uid <uid> <value> [--inspect]` | 通过 uid 填写输入框。 |
 | `fill --selector "css" <value>` | 通过选择器填写。 |
 | `fill-form <uid=val>...` | 批量填写。 |
-| `read [--html] [--truncate N]` | 通过 Mozilla Readability 提取文章。 |
-| `text [uid] [--selector "css"] [--truncate N]` | 获取页面或元素的可见文本。 |
-| `eval <expression> [--selector "css"]` | 在页面上下文中执行 JS。`el` = 匹配的元素。 |
-| `extract [--selector "css"] [--limit N] [--scroll] [--a11y]` | 自动检测重复数据。`--a11y` 用于 React SPA（如 X.com）。 |
-| `network [--filter "pattern"] [--body] [--live N]` | 网络请求和 API 响应。 |
-| `console [--level error] [--clear]` | console.log/warn/error + JS 异常。 |
-| `pipe` | 持久化 JSON stdin/stdout 连接。 |
-| `wait <text\|url\|selector> <pattern>` | 等待条件满足。 |
+| `select --uid <uid> <value>` | 按值或可见文本选择下拉选项。 |
+| `select --selector "css" <value>` | 通过 CSS 选择器选择。 |
+| `check <uid>` | 确保复选框/单选框为选中状态（幂等）。 |
+| `uncheck <uid>` | 确保复选框/单选框为未选中状态（幂等）。 |
+| `upload --uid <uid> <file>...` | 上传文件到文件输入框。 |
+| `upload --selector "css" <file>...` | 通过 CSS 选择器上传。 |
+| `drag <from-uid> <to-uid>` | 拖拽元素到另一个元素。 |
 | `type <text> [--selector "css"]` | 在聚焦元素中输入文本。 |
 | `press <key>` | Enter、Tab、Escape 等按键。 |
 | `scroll <down\|up\|uid>` | 滚动页面或将元素滚动到可见区域。 |
 | `hover <uid>` | 悬停。 |
-| `back` | 浏览器后退。 |
-| `screenshot [--filename name]` | 截图保存到文件。 |
-| `tabs` | 列出打开的标签页。 |
-| `diff` | 查看上次 inspect 以来的变化。 |
-| `close [--purge]` | 停止浏览器。`--purge` 删除 cookie/配置。 |
-| `status` | 会话信息。 |
-| `stop` | 停止守护进程。 |
+| `wait <text\|url\|selector> <pattern>` | 等待条件满足。 |
+
+### 内容提取
+
+| 命令 | 功能 |
+|---------|------------|
+| `read [--html] [--truncate N]` | 通过 Mozilla Readability 提取文章。 |
+| `text [uid] [--selector "css"] [--truncate N]` | 获取页面或元素的可见文本。 |
+| `eval <expression> [--selector "css"]` | 在页面上下文中执行 JS。`el` = 匹配的元素。 |
+| `extract [--selector "css"] [--limit N] [--scroll] [--a11y]` | 自动检测重复数据。`--a11y` 用于 React SPA（如 X.com）。 |
+
+### 监控
+
+| 命令 | 功能 |
+|---------|------------|
+| `network [--filter "pattern"] [--body] [--live N] [--abort "pattern"]` | 网络请求和 API 响应。`--abort` 拦截匹配的请求。 |
+| `console [--level error] [--clear]` | console.log/warn/error + JS 异常。 |
+
+### 高级
+
+| 命令 | 功能 |
+|---------|------------|
+| `frame <selector\|main>` | 切换到 iframe 上下文（或返回主页面）。 |
+| `batch` | 从 stdin 的 JSON 数组执行多条命令。 |
+| `pipe` | 持久化 JSON stdin/stdout 连接。 |
 
 ## 全局参数
 
@@ -191,6 +258,49 @@ chrome-agent text --selector "[role=main]" --truncate 1000
 chrome-agent network --filter "api" --body
 ```
 
+## 表单：下拉菜单、复选框、文件上传
+
+```bash
+# 按值或可见文本选择下拉选项
+chrome-agent select --uid n15 "California"
+
+# 幂等的复选框控制
+chrome-agent check n20     # 已选中则不操作
+chrome-agent uncheck n20   # 已取消选中则不操作
+
+# 文件上传
+chrome-agent upload --uid n30 /path/to/document.pdf
+
+# 双击（文本选择、特殊控件）
+chrome-agent dblclick n42
+```
+
+## iframe
+
+```bash
+# 切换到 iframe
+chrome-agent frame "#payment-iframe"
+chrome-agent inspect    # 查看 iframe 内容
+chrome-agent fill --selector "input[name=card]" "4242424242424242"
+
+# 切回主页面
+chrome-agent frame main
+```
+
+## 批量模式
+
+从 stdin 的 JSON 数组执行命令序列，无需每条命令单独启动进程：
+
+```bash
+echo '[
+  {"cmd":"goto","url":"https://example.com"},
+  {"cmd":"inspect","filter":"button"},
+  {"cmd":"click","uid":"n42"}
+]' | chrome-agent batch
+```
+
+每条命令输出一行 JSON。比每条命令单独启动进程快约 10 倍。
+
 ## 隐身模式
 
 `--stealth` 通过 CDP 修补 7 项自动化指纹：
@@ -233,7 +343,7 @@ chrome-agent --copy-cookies goto github.com/notifications --inspect
 
 你的真实 Chrome 不受影响。
 
-## 网络和控制台捕获
+## 网络捕获与请求拦截
 
 ```bash
 # 已加载的资源（隐身安全，使用 Performance API）
@@ -242,11 +352,24 @@ chrome-agent network --filter "api"
 # 实时流量及响应体
 chrome-agent network --live 5 --body --filter "graphql"
 
+# 拦截追踪/广告请求（使用 Fetch 域拦截）
+chrome-agent network --abort "*tracking*" --live 30
+
 # 控制台输出
 chrome-agent console --level error    # 仅错误 + 异常
 ```
 
 控制台捕获使用注入的拦截器，而非 `Runtime.enable`。
+
+## 带链接 URL 的 inspect
+
+Agent 在决定点击哪个链接时，通常需要 URL 而不仅仅是文本：
+
+```bash
+chrome-agent inspect --urls --filter link
+# uid=n82 link "Pricing" url="https://example.com/pricing"
+# uid=n97 link "Docs" url="https://docs.example.com"
+```
 
 ## Pipe 模式
 
@@ -310,22 +433,19 @@ Claude Code 权限配置：
 
 ## 对比
 
-| | chrome-agent | dev-browser | chrome-devtools-mcp | Playwright MCP |
-|---|---|---|---|---|
-| 语言 | Rust | Rust + Node.js | TypeScript | TypeScript |
-| 运行时依赖 | 无 | Node + npm + Playwright + QuickJS | Node + Puppeteer | Node + Playwright |
-| 二进制大小 | 3 MB | 3 MB CLI + 200 MB 依赖 | npm 包 | npm 包 |
-| CLI 启动速度 | ~10ms（会话复用） | ~500ms | 不适用（MCP） | 不适用（MCP） |
-| 元素定位 | uid + 选择器 + 坐标 | 选择器 + snapshotForAI | uid（顺序分配） | 选择器 |
-| UID 稳定性 | backendNodeId（稳定） | 不适用 | 顺序分配（会重新编号） | 不适用 |
-| 操作 + 观察 | `--inspect`（1 次调用） | 批量脚本 | 每次操作 1 次调用 | 每次操作 1 次调用 |
-| 隐身模式 | 7 项 CDP 补丁 | 无 | 无 | 无 |
-| 阅读模式 | `read`（Readability） | 无 | 无 | 无 |
-| 网络捕获 | 回溯 + 实时 | 无 | 无 | 仅元数据 |
-| 数据提取 | `extract`（自动检测） | 无 | 无 | 无 |
-| 控制台捕获 | 隐身安全 | 无 | 有 | 无 |
-| Pipe 模式 | 有 | 无 | 无 | 无 |
-| 代码量 | ~6.2K 行 | ~76K 行 | ~12K 行 | Playwright |
+|  | chrome-agent | agent-browser (Vercel) | Playwright MCP |
+|---|---|---|---|
+| 语言 | Rust | Rust | TypeScript |
+| 二进制 | 3 MB，零运行时 | 3 MB CLI + 仪表盘 + 云服务商 | Node + Playwright |
+| 启动速度 | ~10ms（会话复用） | 守护进程（首次后快速） | 冷启动 |
+| Token 效率 | ~50 token/页（无障碍树噪音过滤） | ~200 token/页（无障碍树） | ~2,000 token（HTML） |
+| UID 稳定性 | `backendNodeId`（跨 inspect 稳定） | 顺序 `@e1, @e2`（每次快照重新分配） | 不适用（选择器） |
+| 操作 + 观察 | `--inspect` 参数（1 次调用） | 单独 snapshot 调用 | 单独调用 |
+| 隐身 | 7 项原生 CDP 补丁 | 委托给云服务商 | 无 |
+| 阅读模式 | `read`（Readability.js） | 无 | 无 |
+| 数据提取 | `extract`（自动检测重复数据） | 无 | 无 |
+| 代码量 | ~7.3K 行 | ~40K 行 | Playwright |
+| 设计目标 | 最少 token，最大自主性 | 功能完整平台 | 浏览器测试 |
 
 ## 许可证
 

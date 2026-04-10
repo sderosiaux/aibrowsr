@@ -31,28 +31,40 @@ LLM USAGE GUIDE:
     chrome-agent fill --uid n20 "value"                 # fill by uid
     chrome-agent fill --selector "input[name=q]" "val" # fill by CSS selector
 
-  Dropdowns:
+  Dropdowns (<select> elements only):
     chrome-agent select --uid n15 "Option text"        # select by value or visible text
     chrome-agent select --selector "#country" "France" # by CSS selector
+    # For custom dropdowns (React, MUI, etc.): click to open, then click the option.
 
-  Checkboxes and radios (idempotent):
+  Checkboxes and radios (idempotent, uid only):
     chrome-agent check n20                              # ensure checked (no-op if already)
     chrome-agent uncheck n20                            # ensure unchecked (no-op if already)
+    # Prefer check/uncheck over click — they guarantee the target state.
 
   File upload:
     chrome-agent upload --uid n30 /path/to/file.pdf    # by uid
     chrome-agent upload --selector "input[type=file]" /path/to/file.pdf
+    # File inputs are often hidden from the a11y tree. Use --selector to target them.
 
   Double-click:
-    chrome-agent dblclick n42                           # by uid (also --selector, --xy)
+    chrome-agent dblclick n42                           # by uid
+    chrome-agent dblclick --selector ".editable-cell"  # by CSS selector
+    chrome-agent dblclick --xy 300,200                  # by coordinates
+    # Useful for: text selection, inline editing, expanding tree nodes.
 
-  Drag and drop:
+  Drag and drop (mouse-event based):
     chrome-agent drag n10 n20                           # drag from uid to uid
+    # Works with: Sortable.js, React DnD (mouse backend), custom mousedown handlers.
+    # Does NOT work with HTML5 Drag and Drop API (sites using dragstart/dragover/drop).
+    # For HTML5 DnD sites, use eval with custom JS to dispatch drag events.
 
   Iframes:
     chrome-agent frame "#payment-iframe"               # switch to iframe context
-    chrome-agent inspect                                # see iframe content
+    chrome-agent inspect                                # re-inspect to get iframe UIDs
+    chrome-agent fill --selector "input[name=card]" "4242..."  # interact inside iframe
     chrome-agent frame main                             # switch back to main page
+    # Only works with <iframe>, not legacy <frame>/<frameset>.
+    # Always re-inspect after switching — UIDs are scoped to the frame.
 
   Inspection + filtering:
     chrome-agent inspect                               # full accessibility tree
@@ -88,6 +100,8 @@ LLM USAGE GUIDE:
   Batch mode (execute multiple commands at once):
     echo '[{"cmd":"goto","url":"https://example.com"},{"cmd":"inspect"},{"cmd":"click","uid":"n12"}]' | chrome-agent batch
     # Returns one JSON line per command. Faster than separate CLI calls.
+    # UIDs from inspect are valid for subsequent commands in the same batch.
+    # After goto in a batch, UIDs change — use the ones from the next inspect.
 
   Pipe mode (persistent connection, 10x faster):
     echo '{"cmd":"goto","url":"https://example.com","inspect":true}' | chrome-agent pipe
@@ -113,6 +127,15 @@ LLM USAGE GUIDE:
     chrome-agent --json goto https://example.com
     -> {"ok":true,"url":"...","title":"..."}
     Errors: {"ok":false,"error":"...","hint":"..."} (exit 0, always parseable)
+
+  More commands:
+    chrome-agent hover n30                             # hover over element
+    chrome-agent fill-form n20="a@b.com" n30="pass"   # fill multiple fields at once
+    chrome-agent diff                                  # what changed since last inspect
+    chrome-agent tabs                                  # list open tabs
+    chrome-agent history [--filter "pattern"]          # browsing history
+    chrome-agent status                                # session info
+    chrome-agent screenshot [--filename name]          # screenshot to file
 
   Cleanup:
     chrome-agent close                                 # stop browser
